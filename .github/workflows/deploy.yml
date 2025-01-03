@@ -1,0 +1,44 @@
+name: Deploy Test Flow
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Download latest deployer version metadata through API
+      - name: Get deployer version
+        id: get-version
+        run: |
+          METADATA=$(curl -s -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/latest.json")
+          LINUX_FILE=$(echo $METADATA | jq -r '.platforms[] | select(.platform=="linux") | .filename')
+          echo "DEPLOYER_FILE=${LINUX_FILE}" >> $GITHUB_ENV
+          echo "Found deployer version: ${LINUX_FILE}"
+
+      # Download the deployer binary through API
+      - name: Download deployer
+        run: |
+          curl -o deploy_to_onnyx -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/${DEPLOYER_FILE}"
+          chmod +x deploy_to_onnyx
+
+      # Update server configuration in deploy.yaml
+      - name: Update deploy config
+        run: |
+          # Add server configuration at the beginning of the file
+          sed -i '1i\# Server configuration\nserver:\n  url: "${{ secrets.ONNYX_SERVER_URL }}"\n  api_key: "${{ secrets.ONNYX_API_KEY }}"\n' deploy.yaml
+          # Only set version if it's not already specified
+          if ! grep -q "version:" deploy.yaml; then
+            echo "  version: \"${{ github.sha }}\"" >> deploy.yaml
+          fi
+
+      # Run deployer
+      - name: Deploy test flow
+        run: |
+          ./deploy_to_onnyx -config deploy.yaml

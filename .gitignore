@@ -1,0 +1,22 @@
+# python
+*.pyc
+*.pyo
+*.pyd
+*.pyx
+*.pxd
+*.pxi
+*.pxi.in
+*.pyx.in
+__pycache__
+.venv*
+
+*.log
+temp_*
+
+*.yaml
+
+# go
+*.exe
+*.dll
+*.so
+*.dylib
