@@ -1,0 +1,14 @@
+# Files to deploy
+deploy:
+  - files:
+      - "example_flow.py"
+      - "requirements.txt"
+  - folders:
+      - "tests"
+
+# Test configuration
+test:
+  name: "widget_ist"
+  entry_point: "example_flow.py:example_flow"
+  python_version: "3.11.7"
+  version: "0.1.1"

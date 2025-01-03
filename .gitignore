@@ -13,8 +13,6 @@ __pycache__
 *.log
 temp_*
 
-*.yaml
-
 # go
 *.exe
 *.dll
