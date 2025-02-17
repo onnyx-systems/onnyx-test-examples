@@ -6,6 +6,7 @@ from onnyx.results import TestResult
 from onnyx.decorators import test
 from onnyx.context import gcc
 from onnyx.mqtt import BannerState
+from onnyx.utils import range_check_list, range_check
 import subprocess
 import cv2
 import numpy as np
@@ -33,6 +34,7 @@ class FailureCodes(FailureCode):
     IMAGE_CAPTURE_FAILED = (-7, "Image capture failed")
     WRITE_SPEED_BELOW_MIN = (-8, "Write speed below minimum threshold")
     MISSING_DEPENDENCIES = (-9, "Missing system dependencies")
+    CPU_PERFORMANCE_FAILED = (-10, "CPU performance below requirements")
 
 
 @test()
@@ -243,78 +245,159 @@ def disk_test(min_mbps: float, num_files: int = 5):
                 "Data saved successfully. Average write speed: {avg_speed:.2f} MB/s"
                 return_value: {
                     "disk_test_results": List of per-file test results,
-                    "average_speed_mbps": Average write speed in MB/s
+                    "write_speeds": List of write speeds in MB/s
                 }
 
             - Failure (WRITE_SPEED_BELOW_MIN):
-                "Average write speed ({avg_speed:.2f} MB/s) is below minimum required speed of {min_mbps} MB/s"
+                "Write speed out of range: {message}"
                 return_value: {
                     "disk_test_results": List of per-file test results,
-                    "average_speed_mbps": Average write speed in MB/s
+                    "write_speeds": List of write speeds in MB/s
                 }
-                Condition: Average write speed below minimum threshold
+                Condition: Write speeds outside configured range
 
             - Failure (ERROR_SAVING_DATA):
                 "Error saving data: {error}"
                 Condition: Exception during file operations
     """
     try:
+        context = gcc()
+        cellConfig = context.document.get("_cell_config_obj", {})
+
+        # Use write_speed_mbps from cellConfig if available, otherwise create default range
+        if not "write_speed_mbps" in cellConfig:
+            cellConfig["write_speed_mbps"] = {
+                "min": min_mbps,
+                "max": 10000.0,
+            }  # Up to 10GB/s
+
         results = []
+        write_speeds = []
         csv_path = f"disk_test_results.csv"
+
+        # Increase test file size to 100MB for more accurate measurements
+        TEST_FILE_SIZE_MB = 100
+        data = os.urandom(1024 * 1024 * TEST_FILE_SIZE_MB)  # Create test data once
 
         with open(csv_path, "w", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(["File", "Write Time (s)", "Write Speed (MB/s)"])
+            csvwriter.writerow(
+                [
+                    "File",
+                    "Write Time (s)",
+                    "Write Speed (MB/s)",
+                    "File Size (MB)",
+                    "Start Time",
+                    "End Time",
+                ]
+            )
 
             for i in range(num_files):
                 file_path = f"disk_test_file_{i+1}.dat"
-                # make 10 MB of data
-                data = os.urandom(1024 * 1024 * 10)
-                start_time = time.time()
-                with open(file_path, "wb") as f:
-                    f.write(data)
-                end_time = time.time()
 
-                write_time = end_time - start_time
-                file_size_mb = len(data) / (1024 * 1024)  # Convert bytes to MB
-                if write_time == 0:
-                    write_speed_mbps = 0
-                else:
-                    write_speed_mbps = file_size_mb / write_time
+                try:
+                    # Ensure we start with a clean file
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
 
-                csvwriter.writerow(
-                    [file_path, f"{write_time:.4f}", f"{write_speed_mbps:.2f}"]
-                )
+                    # Get high precision time
+                    start_time = time.perf_counter()
 
-                results.append(
-                    {
-                        "file": file_path,
-                        "write_time_seconds": write_time,
-                        "write_speed_mbps": write_speed_mbps,
-                    }
-                )
+                    with open(file_path, "wb") as f:
+                        f.write(data)
+                        # Force flush to disk
+                        f.flush()
+                        os.fsync(f.fileno())
 
-                # Delete the file so it's not archived
-                os.remove(file_path)
+                    end_time = time.perf_counter()
+                    write_time = end_time - start_time
 
-        avg_speed = sum(r["write_speed_mbps"] for r in results) / len(results)
+                    # Verify file was written correctly
+                    actual_size = os.path.getsize(file_path)
+                    actual_size_mb = actual_size / (1024 * 1024)
 
-        if avg_speed < min_mbps:
+                    if actual_size != len(data):
+                        context.logger.error(
+                            f"File size mismatch! Expected {TEST_FILE_SIZE_MB}MB, got {actual_size_mb:.2f}MB"
+                        )
+                        write_speed_mbps = 0
+                    elif write_time <= 0:
+                        context.logger.error(f"Invalid write time: {write_time}s")
+                        write_speed_mbps = 0
+                    else:
+                        write_speed_mbps = TEST_FILE_SIZE_MB / write_time
+
+                    # Log detailed timing info
+                    context.logger.info(
+                        f"File {i+1}: Size={actual_size_mb:.2f}MB, "
+                        f"Time={write_time:.4f}s, Speed={write_speed_mbps:.2f}MB/s"
+                    )
+
+                    csvwriter.writerow(
+                        [
+                            file_path,
+                            f"{write_time:.4f}",
+                            f"{write_speed_mbps:.2f}",
+                            f"{actual_size_mb:.2f}",
+                            start_time,
+                            end_time,
+                        ]
+                    )
+
+                    results.append(
+                        {
+                            "file": file_path,
+                            "write_time_seconds": write_time,
+                            "write_speed_mbps": write_speed_mbps,
+                            "file_size_mb": actual_size_mb,
+                            "start_time": start_time,
+                            "end_time": end_time,
+                        }
+                    )
+
+                    if write_speed_mbps > 0:  # Only include non-zero speeds
+                        write_speeds.append(write_speed_mbps)
+
+                finally:
+                    # Clean up test file
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        context.logger.error(f"Error cleaning up file {file_path}: {e}")
+
+        if not write_speeds:
             return TestResult(
-                f"Average write speed ({avg_speed:.2f} MB/s) is below minimum required speed of {min_mbps} MB/s",
-                FailureCodes.WRITE_SPEED_BELOW_MIN,
+                "All write speed measurements were 0 MB/s. Check disk permissions and space.",
+                FailureCodes.ERROR_SAVING_DATA,
                 return_value={
                     "disk_test_results": results,
-                    "average_speed_mbps": avg_speed,
+                    "write_speeds": write_speeds,
                 },
             )
 
+        # Check write speeds against range using write_speed_mbps config
+        rc = range_check_list(
+            write_speeds, "write_speed_mbps", cellConfig, prefix="disk_test"
+        )
+
+        if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+            return TestResult(
+                f"Write speed out of range: {rc.message}",
+                FailureCodes.WRITE_SPEED_BELOW_MIN,
+                return_value={
+                    "disk_test_results": results,
+                    "write_speeds": write_speeds,
+                },
+            )
+
+        avg_speed = sum(write_speeds) / len(write_speeds)
         return TestResult(
             f"Data saved successfully. Average write speed: {avg_speed:.2f} MB/s",
             FailureCodes.NO_FAILURE,
             return_value={
                 "disk_test_results": results,
-                "average_speed_mbps": avg_speed,
+                "write_speeds": write_speeds,
             },
         )
     except Exception as e:
@@ -428,8 +511,14 @@ def cpu_stress_test(duration_seconds: int = 5):
                     "initial_cpu_percent": Initial CPU usage percentage,
                     "final_cpu_percent": Final CPU usage percentage,
                     "cpu_cores": Number of CPU cores,
-                    "cpu_freq": CPU frequency information dictionary
+                    "cpu_freq": CPU frequency information dictionary,
+                    "cpu_percentages": List of CPU usage percentages
                 }
+
+            - Failure (CPU_PERFORMANCE_FAILED):
+                "CPU usage out of expected range: {message}"
+                return_value: Same as success
+                Condition: CPU usage outside configured range
 
             - Failure (EXCEPTION):
                 "Error during CPU stress test: {error}"
@@ -442,6 +531,7 @@ def cpu_stress_test(duration_seconds: int = 5):
         operations_count = 0
         last_banner_update = start_time
         BANNER_UPDATE_INTERVAL = 0.5  # Update banner every 0.5 seconds
+        cpu_percentages = []  # List to store CPU percentages for range check
 
         # Get initial CPU usage
         initial_cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -464,6 +554,7 @@ def cpu_stress_test(duration_seconds: int = 5):
                 elapsed = current_time - start_time
                 remaining = max(0, duration_seconds - elapsed)
                 current_cpu = psutil.cpu_percent(interval=0)
+                cpu_percentages.append(current_cpu)  # Store CPU percentage
                 context.set_banner(
                     f"CPU Test: {remaining:.1f}s remaining | CPU Usage: {current_cpu}%",
                     "warning" if current_cpu > 80 else "info",
@@ -475,20 +566,38 @@ def cpu_stress_test(duration_seconds: int = 5):
 
         # Get final CPU usage
         final_cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percentages.append(final_cpu_percent)
 
-        # No need to explicitly clear banner - it will be cleared when test completes
+        # Check CPU usage range
+        cellConfig = context.document.get("_cell_config_obj", {})
+        if not "cpu_usage_range" in cellConfig:
+            cellConfig["cpu_usage_range"] = {"min": 10.0, "max": 100.0}  # Default range
+
+        rc = range_check_list(
+            cpu_percentages, "cpu_usage_range", cellConfig, prefix="cpu_stress"
+        )
+
+        return_value = {
+            "duration_seconds": actual_duration,
+            "operations_completed": operations_count,
+            "initial_cpu_percent": initial_cpu_percent,
+            "final_cpu_percent": final_cpu_percent,
+            "cpu_cores": psutil.cpu_count(),
+            "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+            "cpu_percentages": cpu_percentages,
+        }
+
+        if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+            return TestResult(
+                f"CPU usage out of expected range: {rc.message}",
+                FailureCodes.CPU_PERFORMANCE_FAILED,
+                return_value=return_value,
+            )
 
         return TestResult(
             f"CPU stress test completed successfully",
             FailureCodes.NO_FAILURE,
-            return_value={
-                "duration_seconds": actual_duration,
-                "operations_completed": operations_count,
-                "initial_cpu_percent": initial_cpu_percent,
-                "final_cpu_percent": final_cpu_percent,
-                "cpu_cores": psutil.cpu_count(),
-                "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
-            },
+            return_value=return_value,
         )
     except Exception as e:
         if "context" in locals():
@@ -511,6 +620,15 @@ def get_screen_resolution():
         TestResult: Test result with possible outcomes as before
     """
     try:
+        context = gcc()
+        cellConfig = context.document.get("_cell_config_obj", {})
+
+        # Set default ranges if not in config
+        if not "min_resolution_width" in cellConfig:
+            cellConfig["min_resolution_width"] = {"min": 1024, "max": 100000}
+        if not "min_resolution_height" in cellConfig:
+            cellConfig["min_resolution_height"] = {"min": 768, "max": 100000}
+
         if platform.system() == "Windows":
             user32 = ctypes.windll.user32
             width = user32.GetSystemMetrics(0)
@@ -532,6 +650,35 @@ def get_screen_resolution():
             except (subprocess.CalledProcessError, IndexError):
                 # Fallback for systems without X11
                 width = height = 0
+
+        # Check width and height against minimum requirements
+        rc_width = range_check(
+            width, "min_resolution_width", cellConfig, prefix="screen"
+        )
+
+        if rc_width.failure_code != BaseFailureCodes.NO_FAILURE:
+            return TestResult(
+                f"Screen width below minimum requirement: {rc_width.message}",
+                FailureCodes.EXCEPTION,
+                return_value={
+                    "width": width,
+                    "height": height,
+                },
+            )
+
+        rc_height = range_check(
+            height, "min_resolution_height", cellConfig, prefix="screen"
+        )
+
+        if rc_height.failure_code != BaseFailureCodes.NO_FAILURE:
+            return TestResult(
+                f"Screen height below minimum requirement: {rc_height.message}",
+                FailureCodes.EXCEPTION,
+                return_value={
+                    "width": width,
+                    "height": height,
+                },
+            )
 
         return TestResult(
             f"Screen resolution: {width}x{height}",
@@ -558,6 +705,18 @@ def check_battery_status():
         TestResult: Test result with possible outcomes as before
     """
     try:
+        context = gcc()
+        cellConfig = context.document.get("_cell_config_obj", {})
+
+        # Set default ranges if not in config
+        if not "battery_percentage_range" in cellConfig:
+            cellConfig["battery_percentage_range"] = {"min": 10.0, "max": 100.0}
+        if not "battery_voltage_range" in cellConfig:
+            cellConfig["battery_voltage_range"] = {
+                "min": 10.8,
+                "max": 12.6,
+            }  # Typical laptop battery range
+
         battery = psutil.sensors_battery()
         if battery is None:
             # Try Linux-specific method if psutil fails
@@ -572,13 +731,32 @@ def check_battery_status():
                             status = f.read().strip()
                         power_plugged = status == "Charging"
 
+                        # Check battery percentage range
+                        rc = range_check(
+                            percent,
+                            "battery_percentage_range",
+                            cellConfig,
+                            prefix="battery",
+                        )
+
+                        if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+                            return TestResult(
+                                f"Battery percentage out of range: {rc.message}",
+                                FailureCodes.EXCEPTION,
+                                return_value={
+                                    "battery_percent": percent,
+                                    "power_plugged": power_plugged,
+                                    "seconds_left": -1,
+                                },
+                            )
+
                         return TestResult(
                             f"Battery at {percent}%, {'plugged in' if power_plugged else 'not plugged in'}",
                             FailureCodes.NO_FAILURE,
                             return_value={
                                 "battery_percent": percent,
                                 "power_plugged": power_plugged,
-                                "seconds_left": -1,  # Not available in this method
+                                "seconds_left": -1,
                             },
                         )
                 except Exception:
@@ -587,6 +765,22 @@ def check_battery_status():
             return TestResult(
                 "No battery detected",
                 FailureCodes.NO_BATTERY,
+            )
+
+        # Check battery percentage range
+        rc = range_check(
+            battery.percent, "battery_percentage_range", cellConfig, prefix="battery"
+        )
+
+        if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+            return TestResult(
+                f"Battery percentage out of range: {rc.message}",
+                FailureCodes.EXCEPTION,
+                return_value={
+                    "battery_percent": battery.percent,
+                    "power_plugged": battery.power_plugged,
+                    "seconds_left": battery.secsleft,
+                },
             )
 
         return TestResult(
