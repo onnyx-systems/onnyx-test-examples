@@ -1,14 +1,19 @@
-# Files to deploy
-deploy:
-  - files:
-      - "example_flow.py"
-      - "requirements.txt"
-  - folders:
-      - "tests"
+server:
+  url: "https://dev-gcp.onnyx.systems/"
+  api_key: ""
 
-# Test configuration
-test:
-  name: "widget_ist"
-  entry_point: "example_flow.py:example_flow"
+test_global:
   python_version: "3.11.7"
-  version: "0.1.1"
+  base_path: "./example_1"
+  deploy:
+    - files:
+        - "requirements.txt"
+
+tests:
+  - name: "widget_ist"
+    entry_point: "example_flow.py:example_flow"
+    deploy:
+      - files:
+          - "example_flow.py"
+      - folders:
+          - "tests"
