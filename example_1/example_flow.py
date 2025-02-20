@@ -1,4 +1,3 @@
-import onnyx
 from onnyx.context import TestContext, test_context
 from tests.example_tests import (
     FailureCodes,
@@ -130,3 +129,24 @@ def example_flow(test_document, settings):
 
         print("Traceback:", traceback.format_exc())
         raise
+
+
+if __name__ == "__main__":
+    test_document = {
+        "_id": "0",  # this can be anything
+        "_cell_config_obj": {
+            "battery_test_enable": False,
+            "cpu_stress_duration": 5,
+            "cpu_usage_range": {"max": 100, "min": 1},
+            "drive_letter": "C",
+            "enable_camera_test": True,
+            "min_write_speed_mbps": 100,
+            "num_test_files": 10,
+            "ping_url": "https://www.google.com",
+            "write_speed_mbps": {"max": 10000, "min": 500},
+        },
+        "_cell_settings_obj": {
+            "not_used_in_this_example": "This is not used in this example",
+        },
+    }
+    example_flow(test_document, "DEV")
