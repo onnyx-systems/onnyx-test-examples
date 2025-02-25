@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import List
 import platform
 from shutil import which
+from onnyx.context import ButtonResponse
 
 
 class FailureCodes(FailureCode):
@@ -35,6 +36,7 @@ class FailureCodes(FailureCode):
     WRITE_SPEED_BELOW_MIN = (-8, "Write speed below minimum threshold")
     MISSING_DEPENDENCIES = (-9, "Missing system dependencies")
     CPU_PERFORMANCE_FAILED = (-10, "CPU performance below requirements")
+    INPUT_TIMEOUT = (-11, "Input request timed out")
 
 
 @test()
@@ -895,4 +897,59 @@ def check_system_dependencies():
     return TestResult(
         "All required dependencies are installed",
         return_value={"dependencies": dependencies},
+    )
+
+
+@test()
+def interactive_test(buttons: List[str] = None, message: str = None):
+    """Test that demonstrates the interactive functionality
+
+    Args:
+        title (str): The title of the test
+        description (str): The description of the test
+        buttons (List[str], optional): List of button options. Defaults to ["A", "B", "Abort"]
+        message (str, optional): Message to show to user. Defaults to "Select an option"
+    """
+    context = gcc()
+
+    # Use default values if not provided
+    if buttons is None:
+        buttons = ["A", "B", "Abort"]
+    if message is None:
+        message = "Select an option"
+
+    # Show some buttons and wait for response
+    response = context.wait_for_input(
+        buttons=buttons,
+        message=message,
+        timeout=30.0,
+    )
+
+    if response == ButtonResponse.TIMEOUT:
+        return TestResult(
+            "Test timed out waiting for user input",
+            FailureCodes.INPUT_TIMEOUT,
+            return_value={
+                "timeout_duration": 30.0,
+                "available_buttons": buttons,
+            },
+        )
+    elif response == ButtonResponse.CANCELLED:
+        return TestResult(
+            "Test was cancelled by user",
+            FailureCodes.EXCEPTION,
+            return_value={"cancelled": True},
+        )
+    elif response == "Abort":
+        return TestResult(
+            "Test aborted by user",
+            FailureCodes.EXCEPTION,
+            return_value={"aborted": True},
+        )
+
+    # Continue with test...
+    return TestResult(
+        "Test completed successfully",
+        FailureCodes.NO_FAILURE,
+        return_value={"user_response": response},
     )
