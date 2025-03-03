@@ -2,7 +2,8 @@ name: Deploy Test Flow
 
 on:
   push:
-    branches: [main]
+    # branches: [main]
+    branches: [fix-deployment]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -13,32 +14,73 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Download latest deployer version metadata through API
-      - name: Get deployer version
-        id: get-version
+      # Download and prepare deployer
+      - name: Setup deployer
+        id: setup-deployer
         run: |
+          echo "Fetching deployer metadata..."
           METADATA=$(curl -s -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/latest.json")
-          LINUX_FILE=$(echo $METADATA | jq -r '.platforms[] | select(.platform=="linux") | .filename')
-          echo "DEPLOYER_FILE=${LINUX_FILE}" >> $GITHUB_ENV
-          echo "Found deployer version: ${LINUX_FILE}"
-
-      # Download the deployer binary through API
-      - name: Download deployer
-        run: |
-          curl -o deploy_to_onnyx -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/${DEPLOYER_FILE}"
-          chmod +x deploy_to_onnyx
-
-      # Update server configuration in deploy.yaml
-      - name: Update deploy config
-        run: |
-          # Add server configuration at the beginning of the file
-          sed -i '1i\# Server configuration\nserver:\n  url: "${{ secrets.ONNYX_SERVER_URL }}"\n  api_key: "${{ secrets.ONNYX_API_KEY }}"\n' deploy.yaml
-          # Only set version if it's not already specified
-          if ! grep -q "version:" deploy.yaml; then
-            echo "  version: \"${{ github.sha }}\"" >> deploy.yaml
+          
+          # Validate JSON and extract Linux filename
+          if ! LINUX_FILE=$(echo "$METADATA" | jq -e -r '.platforms[] | select(.platform=="linux") | .filename'); then
+            echo "Error: Failed to get valid deployer metadata"
+            echo "API Response: $METADATA"
+            exit 1
           fi
+          
+          echo "Found deployer version: $LINUX_FILE"
+          
+          # Download the deployer
+          echo "Downloading deployer..."
+          if ! curl -s -o deploy_to_onnyx -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/$LINUX_FILE"; then
+            echo "Error: Failed to download deployer"
+            exit 1
+          fi
+          
+          # Make executable
+          chmod +x deploy_to_onnyx
+          echo "Deployer ready: $(ls -la deploy_to_onnyx)"
 
-      # Run deployer
-      - name: Deploy test flow
+      # Update configuration and deploy
+      - name: Deploy to Onnyx
         run: |
+          # Verify deploy.yaml exists
+          if [ ! -f deploy.yaml ]; then
+            echo "Error: deploy.yaml not found. Please create a deploy.yaml file in the repository."
+            exit 1
+          fi
+          
+          # Update server configuration
+          echo "Updating deploy.yaml with server configuration..."
+          TMP_FILE=$(mktemp)
+          cat > "$TMP_FILE" << EOF
+          # Server configuration
+          server:
+            url: "${{ secrets.ONNYX_SERVER_URL }}"
+            api_key: "${{ secrets.ONNYX_API_KEY }}"
+            version: "${{ github.sha }}"
+
+          EOF
+          
+          # Remove existing server section if present
+          if grep -q "^server:" deploy.yaml; then
+            sed -i '/^server:/,/^[a-z]/{/^[a-z]/!d}' deploy.yaml
+            sed -i '/^server:/d' deploy.yaml
+          fi
+          
+          # Combine files
+          cat "$TMP_FILE" deploy.yaml > deploy_combined.yaml
+          mv deploy_combined.yaml deploy.yaml
+          rm "$TMP_FILE"
+          
+          # Run deployment
+          echo "Running deployment..."
           ./deploy_to_onnyx -config deploy.yaml
+          
+          # Check exit code
+          if [ $? -ne 0 ]; then
+            echo "Error: Deployment failed"
+            exit 1
+          fi
+          
+          echo "Deployment completed successfully"

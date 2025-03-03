@@ -1,5 +1,5 @@
 server:
-  url: "https://dev-gcp.onnyx.systems/"
+  url: ""
   api_key: ""
 
 test_global:
