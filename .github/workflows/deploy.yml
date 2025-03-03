@@ -2,8 +2,7 @@ name: Deploy Test Flow
 
 on:
   push:
-    # branches: [main]
-    branches: [fix-deployment]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
