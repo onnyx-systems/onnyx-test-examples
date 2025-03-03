@@ -11,6 +11,7 @@ from tests.example_tests import (
     check_battery_status,
     interactive_test,
 )
+from onnyx.mqtt import BannerState
 import platform
 
 
@@ -59,6 +60,28 @@ def example_flow(test_document, settings):
                 else:
                     ctx.record_values(rc.return_value)
 
+            # clear the banner
+            ctx.set_banner("", "info", BannerState.HIDDEN)
+
+            if failure_code == FailureCodes.NO_FAILURE:
+                # Get default drive based on platform
+                default_drive = "C" if platform.system() == "Windows" else "/"
+                drive_setting = cellConfig.get("drive_letter")
+
+                # If a drive letter is specified in config, respect the platform
+                if drive_setting and platform.system() != "Windows":
+                    # Convert Windows drive letter to Linux root
+                    drive_setting = "/"
+
+                rc = is_drive_present(
+                    "Init",
+                    "Check if drive is present",
+                    drive_setting or default_drive,
+                )
+                if rc.failure_code != FailureCodes.NO_FAILURE:
+                    failure_code = rc.failure_code
+                ctx.record_values(rc.return_value)
+
             if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
                 "enable_interactive_test", True
             ):
@@ -88,25 +111,6 @@ def example_flow(test_document, settings):
                         ctx.record_values(rc.return_value)
 
             if failure_code == FailureCodes.NO_FAILURE:
-                # Get default drive based on platform
-                default_drive = "C" if platform.system() == "Windows" else "/"
-                drive_setting = cellConfig.get("drive_letter")
-
-                # If a drive letter is specified in config, respect the platform
-                if drive_setting and platform.system() != "Windows":
-                    # Convert Windows drive letter to Linux root
-                    drive_setting = "/"
-
-                rc = is_drive_present(
-                    "Init",
-                    "Check if drive is present",
-                    drive_setting or default_drive,
-                )
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                ctx.record_values(rc.return_value)
-
-            if failure_code == FailureCodes.NO_FAILURE:
                 min_mbps = cellConfig.get("min_write_speed_mbps", 10)
                 num_test_files = cellConfig.get("num_test_files", 5)
                 rc = disk_test("Storage Test", "Save data", min_mbps, num_test_files)
@@ -134,6 +138,9 @@ def example_flow(test_document, settings):
                     failure_code = rc.failure_code
                 else:
                     ctx.record_values(rc.return_value)
+
+            # clear the banner
+            ctx.set_banner("", "info", BannerState.HIDDEN)
 
             if failure_code == FailureCodes.NO_FAILURE:
                 rc = get_screen_resolution("Display Test", "Get screen resolution")
