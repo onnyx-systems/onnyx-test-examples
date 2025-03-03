@@ -19,7 +19,20 @@ jobs:
         id: setup-deployer
         run: |
           echo "Fetching deployer metadata..."
-          METADATA=$(curl -s -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/latest.json")
+          # Use the full URL instead of relying on path resolution
+          FULL_URL="${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/latest.json"
+          echo "Requesting metadata from: $FULL_URL"
+          
+          # Add -L flag to follow redirects and use -f to fail on HTTP errors
+          METADATA=$(curl -s -L -f -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "$FULL_URL")
+          
+          # Check if we got a valid response
+          if [ -z "$METADATA" ]; then
+            echo "Error: Empty response from server"
+            exit 1
+          fi
+          
+          echo "Response received, validating JSON..."
           
           # Validate JSON and extract Linux filename
           if ! LINUX_FILE=$(echo "$METADATA" | jq -e -r '.platforms[] | select(.platform=="linux") | .filename'); then
@@ -30,9 +43,12 @@ jobs:
           
           echo "Found deployer version: $LINUX_FILE"
           
-          # Download the deployer
+          # Download the deployer with full URL and follow redirects
           echo "Downloading deployer..."
-          if ! curl -s -o deploy_to_onnyx -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/$LINUX_FILE"; then
+          DEPLOYER_URL="${{ secrets.ONNYX_SERVER_URL }}/api/external/storage/deployer-releases/$LINUX_FILE"
+          echo "Downloading from: $DEPLOYER_URL"
+          
+          if ! curl -s -L -f -o deploy_to_onnyx -H "X-API-Key: ${{ secrets.ONNYX_API_KEY }}" "$DEPLOYER_URL"; then
             echo "Error: Failed to download deployer"
             exit 1
           fi
