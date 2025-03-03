@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import List
 import platform
 from shutil import which
+from onnyx.context import ButtonResponse
 
 
 class FailureCodes(FailureCode):
@@ -35,15 +36,22 @@ class FailureCodes(FailureCode):
     WRITE_SPEED_BELOW_MIN = (-8, "Write speed below minimum threshold")
     MISSING_DEPENDENCIES = (-9, "Missing system dependencies")
     CPU_PERFORMANCE_FAILED = (-10, "CPU performance below requirements")
+    INPUT_TIMEOUT = (-11, "Input request timed out")
 
 
 @test()
 def check_internet_connection(
-    url: str = "https://www.google.com", num_pings: int = 5, interval: float = 1.0
+    category: str = None,
+    test_name: str = None,
+    url: str = "https://www.google.com",
+    num_pings: int = 5,
+    interval: float = 1.0,
 ):
     """Check if there's an active internet connection and log ping times.
 
     Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
         url (str): The URL to test the connection against. Defaults to "https://www.google.com".
         num_pings (int): Number of pings to perform. Defaults to 5.
         interval (float): Time between pings in seconds. Defaults to 1.0.
@@ -136,13 +144,17 @@ def check_internet_connection(
 
 
 @test()
-def is_drive_present(drive_letter: str = None):
+def is_drive_present(
+    category: str = None, test_name: str = None, drive_letter: str = None
+):
     """Check if a specified drive/mount point is present.
 
     On Windows, checks for drive letter.
     On Linux, checks for mount point in /media or custom path.
 
     Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
         drive_letter (str, optional):
             Windows: drive letter to check (defaults to "C")
             Linux: mount point path (defaults to "/")
@@ -232,10 +244,17 @@ def is_drive_present(drive_letter: str = None):
 
 
 @test()
-def disk_test(min_mbps: float, num_files: int = 5):
+def disk_test(
+    category: str = None,
+    test_name: str = None,
+    min_mbps: float = 10.0,
+    num_files: int = 5,
+):
     """Save test files and measure write performance.
 
     Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
         min_mbps (float): Minimum required write speed in MB/s.
         num_files (int): Number of files to write. Defaults to 5.
 
@@ -408,8 +427,12 @@ def disk_test(min_mbps: float, num_files: int = 5):
 
 
 @test()
-def take_picture():
+def take_picture(category: str = None, test_name: str = None):
     """Take a picture using the laptop's camera and analyze image properties.
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
 
     Returns:
         TestResult: Test result with possible outcomes:
@@ -494,11 +517,15 @@ def take_picture():
 
 
 @test()
-def cpu_stress_test(duration_seconds: int = 5):
+def cpu_stress_test(
+    category: str = None, test_name: str = None, duration_seconds: int = 5
+):
     """Perform a CPU stress test for a specified duration.
     Uses a computationally intensive single-threaded operation to stress test the CPU.
 
     Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
         duration_seconds (int): Duration of the stress test in seconds.
 
     Returns:
@@ -611,10 +638,14 @@ def cpu_stress_test(duration_seconds: int = 5):
 
 
 @test()
-def get_screen_resolution():
+def get_screen_resolution(category: str = None, test_name: str = None):
     """Get the current screen resolution.
 
     Works on both Windows and Linux (X11).
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
 
     Returns:
         TestResult: Test result with possible outcomes as before
@@ -696,10 +727,14 @@ def get_screen_resolution():
 
 
 @test()
-def check_battery_status():
+def check_battery_status(category: str = None, test_name: str = None):
     """Check the laptop's battery status.
 
     Works on both Windows and Linux.
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
 
     Returns:
         TestResult: Test result with possible outcomes as before
@@ -800,10 +835,14 @@ def check_battery_status():
 
 
 @test()
-def check_system_dependencies():
+def check_system_dependencies(category: str = None, test_name: str = None):
     """Check if all required system dependencies are installed.
 
     Verifies presence of required system tools and libraries for both Windows and Linux.
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
 
     Returns:
         TestResult: Test result with possible outcomes:
@@ -895,4 +934,64 @@ def check_system_dependencies():
     return TestResult(
         "All required dependencies are installed",
         return_value={"dependencies": dependencies},
+    )
+
+
+@test()
+def interactive_test(
+    category: str = None,
+    test_name: str = None,
+    buttons: List[str] = None,
+    message: str = None,
+):
+    """Test that demonstrates the interactive functionality
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
+        buttons (List[str], optional): List of button options. Defaults to ["A", "B", "Abort"]
+        message (str, optional): Message to show to user. Defaults to "Select an option"
+    """
+    context = gcc()
+
+    # Use default values if not provided
+    if buttons is None:
+        buttons = ["A", "B", "Abort"]
+    if message is None:
+        message = "Select an option"
+
+    # Show some buttons and wait for response
+    response = context.wait_for_input(
+        buttons=buttons,
+        message=message,
+        timeout=30.0,
+    )
+
+    if response == ButtonResponse.TIMEOUT:
+        return TestResult(
+            "Test timed out waiting for user input",
+            FailureCodes.INPUT_TIMEOUT,
+            return_value={
+                "timeout_duration": 30.0,
+                "available_buttons": buttons,
+            },
+        )
+    elif response == ButtonResponse.CANCELLED:
+        return TestResult(
+            "Test was cancelled by user",
+            FailureCodes.EXCEPTION,
+            return_value={"cancelled": True},
+        )
+    elif response == "Abort":
+        return TestResult(
+            "Test aborted by user",
+            FailureCodes.EXCEPTION,
+            return_value={"aborted": True},
+        )
+
+    # Continue with test...
+    return TestResult(
+        "Test completed successfully",
+        FailureCodes.NO_FAILURE,
+        return_value={"user_response": response},
     )
