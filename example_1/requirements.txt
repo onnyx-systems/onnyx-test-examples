@@ -22,4 +22,4 @@ PyYAML==6.0.2
 requests==2.32.3
 typing_extensions==4.12.2
 urllib3==2.2.3
-onnyx==0.0.14
+onnyx==0.0.15
