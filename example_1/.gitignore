@@ -6,3 +6,6 @@
 *.pdf
 *.docx
 *.pptx
+# don't ignore test_config.json
+!test_config.json
+
