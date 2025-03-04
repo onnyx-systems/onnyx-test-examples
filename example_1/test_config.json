@@ -1,0 +1,884 @@
+{
+  "id": "widget_ist",
+  "label": "Widget IST",
+  "description": "Widget IST Description",
+  "failure_mode_codes": [
+    {
+      "name": "NO_FAILURE",
+      "code": 0,
+      "description": ""
+    },
+    {
+      "name": "EXCEPTION",
+      "code": -99,
+      "description": ""
+    },
+    {
+      "name": "INTERNET_CONNECTION_FAILED",
+      "code": -1,
+      "description": "Internet connection failed"
+    },
+    {
+      "name": "DRIVE_NOT_PRESENT",
+      "code": -2,
+      "description": "Drive not present"
+    },
+    {
+      "name": "ERROR_CREATING_DATA",
+      "code": -3,
+      "description": "Error creating data"
+    },
+    {
+      "name": "ERROR_SAVING_DATA",
+      "code": -4,
+      "description": "Error saving data"
+    },
+    {
+      "name": "NO_BATTERY",
+      "code": -5,
+      "description": "No battery detected"
+    },
+    {
+      "name": "CAMERA_NOT_AVAILABLE",
+      "code": -6,
+      "description": "Camera not available"
+    },
+    {
+      "name": "IMAGE_CAPTURE_FAILED",
+      "code": -7,
+      "description": "Image capture failed"
+    },
+    {
+      "name": "WRITE_SPEED_BELOW_MIN",
+      "code": -8,
+      "description": "Write speed below minimum threshold"
+    },
+    {
+      "name": "MISSING_DEPENDENCIES",
+      "code": -9,
+      "description": "Missing system dependencies"
+    },
+    {
+      "name": "CPU_PERFORMANCE_FAILED",
+      "code": -10,
+      "description": "CPU performance below requirements"
+    },
+    {
+      "name": "INPUT_TIMEOUT",
+      "code": -11,
+      "description": "Input request timed out"
+    }
+  ],
+  "new_test_form": [
+    {
+      "name": "_serial_id",
+      "label": "Serial ID",
+      "type": "text",
+      "tooltip": "",
+      "validation": {
+        "type": "regex",
+        "value": "^[0-9]{3}$",
+        "message": "Must be 3 digits"
+      }
+    },
+    {
+      "name": "work_order",
+      "label": "Work Order",
+      "type": "text",
+      "tooltip": "",
+      "testType": "",
+      "defaultValue": "12345",
+      "validation": {
+        "type": "regex",
+        "value": "^[0-9]{5}$",
+        "message": "Please enter a valid 5-digit number"
+      }
+    },
+    {
+      "name": "notes",
+      "label": "Notes",
+      "type": "multiline",
+      "tooltip": "",
+      "testType": ""
+    },
+    {
+      "name": "test_option",
+      "label": "Test Option",
+      "type": "Radio",
+      "tooltip": "",
+      "testType": "",
+      "options": [
+        {
+          "label": "Option 1",
+          "value": "option_1"
+        },
+        {
+          "label": "Option 2",
+          "value": "option_2"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "id": "42507",
+      "name": "Colton Black"
+    },
+    {
+      "id": "12345",
+      "name": "David Antaki"
+    }
+  ],
+  "test_schema": [
+    {
+      "name": "_createdAt",
+      "label": "Created At",
+      "_type": "date",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_worker_id",
+      "label": "Worker ID",
+      "_type": "string",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_test_id",
+      "label": "Test ID",
+      "_type": "string",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_cell_id",
+      "label": "Cell ID",
+      "_type": "string",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_state",
+      "label": "State",
+      "_type": "number",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_failure_code",
+      "label": "Failure Code",
+      "_type": "number",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_station_id",
+      "label": "Station ID",
+      "_type": "string",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_runner_version",
+      "label": "Runner Version",
+      "_type": "string",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "_test_time_s",
+      "label": "Test Time (s)",
+      "_type": "number",
+      "immutable": true,
+      "description": ""
+    },
+    {
+      "name": "ping_time_ms",
+      "label": "ping_time_ms",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "drives_present",
+      "label": "drives_present",
+      "_type": "string",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "average_speed_mbps",
+      "label": "average_speed_mbps",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "duration_seconds",
+      "label": "CPU Test Duration",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "num_cores",
+      "label": "num_cores",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "height",
+      "label": "height",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "battery_percent",
+      "label": "battery_percent",
+      "_type": "number",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "power_plugged",
+      "label": "power_plugged",
+      "_type": "boolean",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "width",
+      "label": "Camera Width",
+      "description": "",
+      "_type": "number",
+      "immutable": false
+    },
+    {
+      "name": "camera_metrics.brightness",
+      "label": "camera_metrics.brightness",
+      "_type": "number",
+      "nested": "camera_metrics",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "camera_metrics.contrast",
+      "label": "camera_metrics.contrast",
+      "_type": "number",
+      "nested": "camera_metrics",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "camera_metrics.saturation",
+      "label": "camera_metrics.saturation",
+      "_type": "number",
+      "nested": "camera_metrics",
+      "description": "",
+      "immutable": false
+    },
+    {
+      "name": "cpu_cores",
+      "label": "cpu_cores",
+      "_type": "number",
+      "description": ""
+    }
+  ],
+  "cell_config_template": [
+    {
+      "name": "ping_url",
+      "label": "Ping Url",
+      "description": "URL for ping test",
+      "_type": "string"
+    },
+    {
+      "name": "drive_letter",
+      "label": "Drive Letter",
+      "description": "Drive letter to check for",
+      "_type": "string"
+    },
+    {
+      "name": "min_write_speed_mbps",
+      "label": "Min Write Speed (Mbps)",
+      "description": "Fail threshold for write test",
+      "_type": "number"
+    },
+    {
+      "name": "cpu_stress_duration",
+      "label": "Cpu Stress Duration",
+      "description": "",
+      "_type": "number"
+    },
+    {
+      "name": "enable_camera_test",
+      "label": "Enable Camera Test",
+      "description": "",
+      "_type": "boolean"
+    },
+    {
+      "name": "battery_test_enable",
+      "label": "Enable Battery Test",
+      "description": "",
+      "_type": "boolean"
+    },
+    {
+      "name": "num_test_files",
+      "label": "Number of Test Files",
+      "description": "",
+      "_type": "number"
+    },
+    {
+      "name": "test_file",
+      "label": "Test File",
+      "description": "",
+      "_type": "file"
+    }
+  ],
+  "charts": [
+    {
+      "id": "1731270166422",
+      "name": "Ping Time Analysis for Google",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "timestamp",
+        "y": [
+          {
+            "name": "ping_time_ms",
+            "color": "#0077cc",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Timestamp",
+        "yAxisName": "Ping Time (ms)",
+        "y2AxisName": ""
+      },
+      "selectedRecord": "000_351",
+      "selectedCsvFile": "ping_results.csv",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "xStepSize": 0,
+      "yStepSize": 0
+    },
+    {
+      "id": "1729023744232",
+      "name": "Disk Write Speed Comparison",
+      "chartType": "Bar",
+      "chartOptions": {
+        "x": "File",
+        "y": [
+          {
+            "name": "Write Time (s)",
+            "color": "#c79900",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Test Instance",
+        "yAxisName": "Write Time (S)",
+        "y2AxisName": ""
+      },
+      "selectedRecord": "000_352",
+      "selectedCsvFile": "disk_test_results.csv",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "none",
+      "xStepSize": 0,
+      "yStepSize": 0
+    },
+    {
+      "id": "1741040377560",
+      "name": "Website Ping Time Over Time",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "timestamp",
+        "y": [
+          {
+            "name": "ping_time_ms",
+            "color": "#2ca02c",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Timestamp",
+        "yAxisName": "Ping Time (ms)",
+        "y2AxisName": ""
+      },
+      "selectedRecord": "000_663",
+      "selectedCsvFile": "ping_results.csv",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "xStepSize": 0,
+      "yStepSize": 0
+    }
+  ],
+  "aggregateCharts": [
+    {
+      "id": "chart-1729023846204",
+      "name": "Average of Ping Times (ms)",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {},
+      "filters": [],
+      "displayType": "Number",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "selectedField": "ping_time_ms"
+    },
+    {
+      "id": "chart-1729024146014",
+      "name": "Internet Latency Test",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "ping_time_ms",
+            "color": "#0044ff",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Latency (ms)"
+      },
+      "filters": [],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binByDay": true,
+      "binningInterval": "day",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholdMarkers": [
+        {
+          "id": "min",
+          "value": 86.584,
+          "color": "#F06292",
+          "label": "Min Threshold"
+        },
+        {
+          "id": "max",
+          "value": 402.856,
+          "color": "#FFA726",
+          "label": "Max Threshold"
+        }
+      ]
+    },
+    {
+      "id": "chart-1729024159354",
+      "name": "Battery Percentage",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "battery_percent",
+            "color": "#e5a18e",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Battery Percentage"
+      },
+      "filters": [
+        {
+          "field": "battery_percent",
+          "operator": "exists",
+          "value": ""
+        }
+      ],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binByDay": false,
+      "binningInterval": "day",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholds": {
+        "enabled": true,
+        "upperThreshold": 74,
+        "lowerThreshold": 68
+      },
+      "thresholdMarkers": []
+    },
+    {
+      "id": "chart-1729024169154",
+      "name": "SSD Benchmark",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "average_speed_mbps",
+            "color": "#1eff00",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Average Write Speed (Mbps)"
+      },
+      "filters": [],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "day",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholdMarkers": []
+    },
+    {
+      "id": "chart-1729024190375",
+      "name": "CPU Benchmark",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "Bar",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "duration_seconds",
+            "color": "#fffa11",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Duration (S)",
+        "y2AxisName": ""
+      },
+      "filters": [],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "day",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholdMarkers": []
+    },
+    {
+      "id": "chart-1729024210395",
+      "name": "Average Battery Percentage",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {},
+      "filters": [],
+      "displayType": "Number",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "selectedField": "battery_percent"
+    },
+    {
+      "id": "chart-1729024222365",
+      "name": "Standard Deviation of Average Write Speed (Mbps)",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {},
+      "filters": [],
+      "displayType": "Number",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "selectedField": "average_speed_mbps",
+      "aggregationType": "standardDeviation"
+    },
+    {
+      "id": "chart-1729044580316",
+      "name": "Total Test Time (Seconds)",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "ContinuousLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "_test_time_s",
+            "color": "#ff0000",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Seconds",
+        "y2AxisName": "AnyString"
+      },
+      "filters": [
+        {
+          "field": "_test_time_s",
+          "operator": "exists",
+          "value": "3"
+        }
+      ],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "day",
+      "thresholdMarkers": [
+        {
+          "id": "min",
+          "value": -1.4000000000000004,
+          "color": "#F06292",
+          "label": "Min Threshold"
+        },
+        {
+          "id": "max",
+          "value": 27.4,
+          "color": "#FFA726",
+          "label": "Max Threshold"
+        }
+      ]
+    },
+    {
+      "id": "chart-1729091054759",
+      "name": "Camera Metrics",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "camera_metrics.brightness",
+            "color": "#d4c1fd",
+            "axis": "primary"
+          },
+          {
+            "name": "camera_metrics.contrast",
+            "color": "#72bf59",
+            "axis": "secondary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Brightness",
+        "y2AxisName": "Contrast"
+      },
+      "filters": [
+        {
+          "field": "camera_metrics.brightness",
+          "operator": "exists",
+          "value": ""
+        }
+      ],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "day",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholdMarkers": []
+    },
+    {
+      "id": "chart-1729704474978",
+      "name": "All Recent Network Ping Times (ms)",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {
+        "x": "_createdAt",
+        "y": [
+          {
+            "name": "ping_time_ms",
+            "color": "#2607be",
+            "axis": "primary"
+          }
+        ],
+        "xAxisName": "Date Code",
+        "yAxisName": "Ping Time (ms)"
+      },
+      "filters": [
+        {
+          "field": "ping_time_ms",
+          "operator": "exists",
+          "value": ""
+        }
+      ],
+      "displayType": "Chart",
+      "xRangeOverride": {},
+      "yRangeOverride": {},
+      "y2RangeOverride": {},
+      "binningInterval": "none",
+      "xStepSize": 0,
+      "yStepSize": 0,
+      "thresholdMarkers": []
+    },
+    {
+      "id": "chart-1731270307255",
+      "name": "Camera Data",
+      "selectedCsvFile": "",
+      "selectedRecord": "",
+      "chartType": "DiscreteLine",
+      "chartOptions": {},
+      "filters": [
+        {
+          "field": "camera_metrics.brightness",
+          "operator": "exists",
+          "value": ""
+        }
+      ],
+      "displayType": "Table",
+      "selectedFields": [
+        "_createdAt",
+        "camera_metrics.brightness",
+        "camera_metrics.contrast",
+        "camera_metrics.saturation"
+      ]
+    }
+  ],
+  "aggregateChartsLayout": [
+    {
+      "w": 2,
+      "h": 2,
+      "x": 8,
+      "y": 0,
+      "i": "chart-1729023846204",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 3,
+      "h": 3,
+      "x": 0,
+      "y": 0,
+      "i": "chart-1729024146014",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 3,
+      "h": 3,
+      "x": 3,
+      "y": 0,
+      "i": "chart-1729024159354",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 6,
+      "h": 5,
+      "x": 6,
+      "y": 5,
+      "i": "chart-1729024169154",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 3,
+      "h": 3,
+      "x": 6,
+      "y": 2,
+      "i": "chart-1729024190375",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "x": 6,
+      "y": 0,
+      "i": "chart-1729024210395",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "x": 10,
+      "y": 0,
+      "i": "chart-1729024222365",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 6,
+      "h": 3,
+      "x": 0,
+      "y": 7,
+      "i": "chart-1729044580316",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 6,
+      "h": 4,
+      "x": 0,
+      "y": 3,
+      "i": "chart-1729091054759",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 3,
+      "h": 3,
+      "x": 9,
+      "y": 2,
+      "i": "chart-1729704474978",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 5,
+      "h": 5,
+      "x": 0,
+      "y": 10,
+      "i": "chart-1731270307255",
+      "minW": 1,
+      "minH": 1,
+      "moved": false,
+      "static": false
+    }
+  ],
+  "cell_settings_template": [
+    {
+      "name": "cell_setting_a",
+      "label": "Cell Setting A",
+      "description": "(not used)",
+      "_type": "string"
+    },
+    {
+      "name": "USB_port",
+      "label": "USB_port",
+      "description": "",
+      "_type": ""
+    }
+  ],
+  "_updatedAt": {
+    "$date": "2025-03-03T19:37:59.022Z"
+  }
+}
