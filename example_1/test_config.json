@@ -309,7 +309,7 @@
     {
       "name": "cpu_stress_duration",
       "label": "Cpu Stress Duration",
-      "description": "",
+      "description": "hi",
       "_type": "number"
     },
     {
