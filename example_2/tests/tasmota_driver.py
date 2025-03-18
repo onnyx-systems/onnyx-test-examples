@@ -93,80 +93,92 @@ class TasmotaSerialDriver:
         """
         return self.serial is not None and self.serial.is_open
 
-    def send_command(
-        self, command: str, wait_time: float = 0.5
-    ) -> Optional[Dict[str, Any]]:
+    def send_command(self, command: str, wait_time: float = 0.5) -> Dict[str, Any]:
         """Send a command to the Tasmota device and return the response.
 
         Args:
-            command: Tasmota command to send
+            command: Command to send
             wait_time: Time to wait for response in seconds
 
         Returns:
-            Optional[Dict[str, Any]]: JSON response from Tasmota or None if failed
+            Dict[str, Any]: Response from the device or empty dict if failed
         """
         if not self.is_connected():
-            self.logger.error("Not connected to device")
-            return None
+            self.logger.error("Not connected to Tasmota device")
+            return {}
 
         try:
-            # Send command with newline
-            cmd = command.strip() + "\n"
+            # Send the command
             self.logger.debug(f"Sending command: {command}")
-
-            # Write command in chunks to avoid buffer issues
-            self.serial.write(cmd.encode("utf-8"))
+            self.serial.write(f"{command}\r\n".encode('utf-8'))
             self.serial.flush()
 
             # Wait for response
-            self.logger.debug(f"Waiting {wait_time}s for response")
             time.sleep(wait_time)
 
             # Read response
             response = ""
-            start_time = time.time()
-            timeout = 2.0  # 2 second timeout for reading response
+            while self.serial.in_waiting > 0:
+                response += self.serial.read(self.serial.in_waiting).decode('utf-8')
+                time.sleep(0.1)  # Small delay to allow more data to arrive
 
-            # Keep reading until no more data or timeout
-            while (time.time() - start_time) < timeout:
-                if self.serial.in_waiting > 0:
-                    chunk = self.serial.read(self.serial.in_waiting).decode(
-                        "utf-8", errors="replace"
-                    )
-                    response += chunk
-                    # Small delay to allow more data to arrive
-                    time.sleep(0.1)
-                else:
-                    # No more data, break out
-                    break
-
-            if not response:
-                self.logger.warning(f"No response received for command: {command}")
-                return None
-
-            self.logger.debug(f"Raw response: {response}")
+            self.logger.debug(f"Received response: {response}")
 
             # Try to parse JSON response
             try:
-                # Find JSON in the response (Tasmota may send other text too)
-                json_start = response.find("{")
-                json_end = response.rfind("}") + 1
-
-                if json_start >= 0 and json_end > json_start:
-                    json_str = response[json_start:json_end]
-                    self.logger.debug(f"Extracted JSON: {json_str}")
-                    return json.loads(json_str)
+                # Look for JSON objects in the response
+                json_start = response.find('{')
+                if json_start >= 0:
+                    json_str = response[json_start:]
+                    result = json.loads(json_str)
+                    return result
                 else:
-                    # Return raw response if no JSON found
-                    self.logger.debug(f"No JSON found in response, returning raw")
-                    return {"raw_response": response.strip()}
+                    # No JSON found, return raw response
+                    return {"raw_response": response}
             except json.JSONDecodeError as e:
-                self.logger.warning(f"Failed to parse JSON response: {e}")
-                return {"raw_response": response.strip()}
+                self.logger.warning(f"Failed to parse JSON response: {str(e)}")
+                # Return raw response if JSON parsing fails
+                return {"raw_response": response}
 
         except Exception as e:
             self.logger.error(f"Error sending command: {str(e)}")
-            return None
+            return {}
+
+    def send_raw_command(self, command: str, wait_time: float = 0.5) -> str:
+        """Send a command to the Tasmota device and return the raw response without JSON parsing.
+
+        Args:
+            command: Command to send
+            wait_time: Time to wait for response in seconds
+
+        Returns:
+            str: Raw response from the device or empty string if failed
+        """
+        if not self.is_connected():
+            self.logger.error("Not connected to Tasmota device")
+            return ""
+
+        try:
+            # Send the command
+            self.logger.debug(f"Sending raw command: {command}")
+            self.serial.write(f"{command}\r\n".encode('utf-8'))
+            self.serial.flush()
+
+            # Wait for response
+            time.sleep(wait_time)
+
+            # Read response
+            response = ""
+            while self.serial.in_waiting > 0:
+                response += self.serial.read(self.serial.in_waiting).decode('utf-8')
+                time.sleep(0.1)  # Small delay to allow more data to arrive
+
+            self.logger.debug(f"Received raw response: {response}")
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error sending raw command: {str(e)}")
+            return ""
 
     def get_status(self) -> Optional[Dict[str, Any]]:
         """Get the status of the Tasmota device.
@@ -445,6 +457,62 @@ class TasmotaSerialDriver:
             return version
 
         self.logger.warning("Failed to get firmware version")
+        return None
+
+    def get_device_info(self) -> Optional[Dict[str, Any]]:
+        """Get the Tasmota device information.
+        
+        Returns:
+            Optional[Dict[str, Any]]: Device information or None if failed
+        """
+        self.logger.info("Getting device information")
+        
+        # Collect information from multiple status commands
+        device_info = {}
+        
+        # Status 1: Get device information
+        response = self.send_command("Status 1")
+        if response and "StatusPRM" in response:
+            device_info.update({
+                "module": response["StatusPRM"].get("Module", "Unknown"),
+                "device_name": response["StatusPRM"].get("DeviceName", "Unknown"),
+                "friendly_name": response["StatusPRM"].get("FriendlyName", ["Unknown"])[0],
+                "topic": response["StatusPRM"].get("Topic", "Unknown"),
+                "ota_url": response["StatusPRM"].get("OtaUrl", "")
+            })
+        
+        # Status 2: Get firmware information
+        response = self.send_command("Status 2")
+        if response and "StatusFWR" in response:
+            fwr = response["StatusFWR"]
+            device_info.update({
+                "version": fwr.get("Version", "Unknown"),
+                "build_date": fwr.get("BuildDateTime", "Unknown"),
+                "boot_count": fwr.get("BootCount", 0),
+                "core": fwr.get("Core", "Unknown"),
+                "sdk": fwr.get("SDK", "Unknown")
+            })
+        
+        # Status 3: Get logging information
+        response = self.send_command("Status 3")
+        if response and "StatusLOG" in response:
+            device_info["logging"] = response["StatusLOG"]
+        
+        # Status 4: Get memory information
+        response = self.send_command("Status 4")
+        if response and "StatusMEM" in response:
+            device_info["memory"] = response["StatusMEM"]
+        
+        # Status 5: Get network information
+        response = self.send_command("Status 5")
+        if response and "StatusNET" in response:
+            device_info["network"] = response["StatusNET"]
+        
+        if device_info:
+            self.logger.info(f"Retrieved device info: {device_info}")
+            return device_info
+        
+        self.logger.warning("Failed to get device information")
         return None
 
     def get_wifi_status(self) -> Optional[Dict[str, Any]]:

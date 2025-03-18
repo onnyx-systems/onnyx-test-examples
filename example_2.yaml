@@ -1,0 +1,15 @@
+common:
+  requirements: /home/onnyx/onnyx-test-examples/example_2/requirements.txt
+  python_version: 3.11.7
+api:
+  server_url: "http://192.168.86.34:3001"
+  api_key: "d393b9b9-f872-44d8-bf9a-675b256ae4b6"
+test_configs:
+  - name: iot_relay
+    path: /home/onnyx/onnyx-test-examples/example_2/example_flow.py
+    entry_point: example_flow
+    station_name: IOT_RELAY_STATION_1
+    collection_name: iot_relay
+mqtt:
+  broker_url: "192.168.86.34:1883"
+  websocket_port: 9002

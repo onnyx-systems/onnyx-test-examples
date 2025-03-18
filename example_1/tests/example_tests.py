@@ -909,21 +909,6 @@ def check_system_dependencies(category: str = None, test_name: str = None):
             dependencies[dep_name] = {"installed": False, "error": str(e)}
             missing.append(dep_name)
 
-    # Check camera access
-    try:
-        cap = cv2.VideoCapture(0)
-        camera_available = cap.isOpened()
-        cap.release()
-        dependencies["camera"] = {
-            "installed": camera_available,
-            "version": "Available" if camera_available else "Not available",
-        }
-        if not camera_available:
-            missing.append("camera")
-    except Exception as e:
-        dependencies["camera"] = {"installed": False, "error": str(e)}
-        missing.append("camera")
-
     if missing:
         return TestResult(
             f"Missing required dependencies: {', '.join(missing)}",

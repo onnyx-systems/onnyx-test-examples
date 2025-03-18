@@ -4,7 +4,7 @@ server:
 
 test_global:
   python_version: "3.11.7"
-  base_path: "./example_1"
+  base_path: "./"
   deploy:
     - files:
         - "requirements.txt"

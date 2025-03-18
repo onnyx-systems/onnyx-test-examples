@@ -1,1244 +1,932 @@
+from enum import IntEnum
 import time
-import logging
-from typing import Dict, Any, Optional, List, Union
-import platform
 import serial.tools.list_ports
-from onnyx.failure import FailureCode, BaseFailureCodes
-from onnyx.results import TestResult
-from onnyx.decorators import test
-from onnyx.context import gcc
-from onnyx.mqtt import BannerState
-import datetime
 import os
+import socket
+import re
+import concurrent.futures
+from typing import Dict, Any, Optional, List, Tuple, Set
+import ipaddress
+import numpy as np
+import csv
+import random
 
-# Try different import approaches to handle both package and direct imports
-try:
-    # Try relative imports first (when running as a package)
-    from .tasmota_driver import TasmotaSerialDriver
-    from .utils import extract_version_numbers, compare_versions
-    from .rigol_driver import RigolOscilloscopeDriver
-except ImportError:
-    try:
-        # Try absolute imports (when running directly)
-        from tests.tasmota_driver import TasmotaSerialDriver
-        from tests.utils import extract_version_numbers, compare_versions
-        from tests.rigol_driver import RigolOscilloscopeDriver
-    except ImportError:
-        # Last resort: try importing from the current directory
-        import sys
-        import os.path
+from onnyx.context import gcc
+from onnyx.decorators import test
+from onnyx.failure import BaseFailureCodes, FailureCode
+from onnyx.results import TestResult
+from onnyx.utils import range_check_list, range_check
 
-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from tasmota_driver import TasmotaSerialDriver
-        from utils import extract_version_numbers, compare_versions
-        from rigol_driver import RigolOscilloscopeDriver
-
+from .tasmota_driver import TasmotaSerialDriver
+from .rigol_driver import RigolOscilloscopeDriver
+from .waveform_utils import analyze_waveform_file
 
 class FailureCodes(FailureCode):
     # Include base failure codes
     NO_FAILURE = BaseFailureCodes.NO_FAILURE
     EXCEPTION = BaseFailureCodes.EXCEPTION
+    
+    # Test-specific failure codes
+    DEVICE_NOT_FOUND = (-100, "Tasmota device not found")
+    CONNECTION_ERROR = (-101, "Failed to connect to device")
+    FIRMWARE_ERROR = (-102, "Firmware version check failed")
+    RELAY_ERROR = (-103, "Relay operation failed")
+    OSCILLOSCOPE_ERROR = (-104, "Oscilloscope error")
+    MEASUREMENT_ERROR = (-105, "Measurement error")
+    WAVEFORM_ERROR = (-106, "Waveform analysis error")
 
-    # Add specific failure codes for Tasmota relay tests
-    SERIAL_PORT_NOT_FOUND = (-1, "Serial port not found")
-    CONNECTION_FAILED = (-2, "Failed to connect to Tasmota device")
-    RELAY_CONTROL_FAILED = (-3, "Failed to control relay")
-    INVALID_RESPONSE = (-4, "Invalid response from Tasmota device")
-    FIRMWARE_VERSION_MISMATCH = (-5, "Firmware version mismatch")
-    RELAY_STATE_MISMATCH = (-6, "Relay state does not match expected state")
-    COMMAND_TIMEOUT = (-7, "Command timed out")
-    FTDI_DEVICE_NOT_FOUND = (-8, "FTDI USB-to-Serial device not found")
-    OSCILLOSCOPE_CONNECTION_FAILED = (-9, "Failed to connect to oscilloscope")
-    WAVEFORM_CAPTURE_FAILED = (-10, "Failed to capture waveform")
+def parse_version(version_str: str) -> Tuple[int, ...]:
+    """Parse version string into tuple of integers.
+    
+    Extracts numeric version components from strings like:
+    - "9.5.0"
+    - "9.5.0(release-tasmota)"
+    - "v9.5.0"
+    
+    Args:
+        version_str: Version string to parse
+        
+    Returns:
+        Tuple of version components as integers
+    """
+    # Extract version numbers using regex
+    matches = re.findall(r'\d+', version_str)
+    if not matches:
+        return (0, 0, 0)  # Default version if no numbers found
+    return tuple(map(int, matches[:3]))  # Take first 3 numbers
 
+def should_simulate_failure(failure_code: int) -> bool:
+    """Helper function to determine if we should simulate a failure.
+    
+    Args:
+        failure_code: The failure code that would be returned
+        
+    Returns:
+        bool: True if we should simulate this failure
+    """
+    context = gcc()
+    failure_chance = context.document.get("_cell_config_obj", {}).get("randomly_fail", 0.0)
+    
+    # If failure_chance is 0 or not set, never simulate failures
+    if not failure_chance:
+        return False
+
+    fail = random.random() < failure_chance
+    if fail:
+        context.logger.warning(f"Simulating failure: {failure_code}")
+    return fail
 
 @test()
 def detect_tasmota_serial_port(
-    category: str = None,
-    test_name: str = None,
+    category: str,
+    test_name: str,
     port: str = None,
-    baudrate: int = 115200,
+    baudrate: int = 115200
 ) -> TestResult:
-    """Detect and connect to a Tasmota device on a serial port.
-
-    If port is not specified, attempts to auto-detect the port, prioritizing
-    FTDI USB-to-Serial devices with VID 0403 and PID 6001.
-
+    """Detect and connect to Tasmota device.
+    
     Args:
-        category (str, optional): Test category. Used internally by the test framework.
-        test_name (str, optional): Test name. Used internally by the test framework.
-        port (str, optional): Serial port to use. If None, auto-detection is attempted.
-        baudrate (int, optional): Baud rate for serial communication. Defaults to 115200.
-
+        category: Test category for reporting and organization
+        test_name: Name of this specific test instance
+        port: Serial port (auto-detect if None)
+        baudrate: Serial baudrate
+        
     Returns:
-        TestResult: Test result with possible outcomes:
-            - Success (NO_FAILURE):
-                "Connected to Tasmota device on {port}"
-                return_value: {
-                    "port": Serial port name,
-                    "baudrate": Baud rate used,
-                    "firmware_version": Tasmota firmware version,
-                    "device_info": Device information
-                }
-
-            - Failure (SERIAL_PORT_NOT_FOUND):
-                "No serial ports found" or "Specified port {port} not found"
-                return_value: {
-                    "available_ports": List of available ports
-                }
-
-            - Failure (FTDI_DEVICE_NOT_FOUND):
-                "No FTDI USB-to-Serial devices found"
-                return_value: {
-                    "available_ports": List of available ports
-                }
-
-            - Failure (CONNECTION_FAILED):
-                "Failed to connect to Tasmota device on {port}"
-                return_value: {
-                    "port": Port that failed,
-                    "error": Error message
-                }
+        TestResult with device info containing:
+            - port: The connected serial port
+            - device_info: Dictionary of device information
     """
-    context = gcc()
-    context.set_banner("Detecting Tasmota device...", "info", BannerState.SHOWING)
-
-    # Get list of all available serial ports
-    all_ports = list(serial.tools.list_ports.comports())
-    available_ports = [p.device for p in all_ports]
-
-    if not available_ports:
-        context.set_banner("No serial ports found", "error", BannerState.SHOWING)
-        return TestResult(
-            "No serial ports found",
-            FailureCodes.SERIAL_PORT_NOT_FOUND,
-            return_value={"available_ports": []},
-        )
-
-    # If port is specified, check if it exists
-    if port and port not in available_ports:
-        context.set_banner(f"Port {port} not found", "error", BannerState.SHOWING)
-        return TestResult(
-            f"Specified port {port} not found",
-            FailureCodes.SERIAL_PORT_NOT_FOUND,
-            return_value={"available_ports": available_ports},
-        )
-
-    # If port is not specified, prioritize FTDI devices with VID 0403 and PID 6001
+    # If port not specified, try to auto-detect FTDI devices
     if not port:
-        # Find FTDI devices
         ftdi_ports = []
-        for p in all_ports:
-            # Log detailed port information for debugging
-            context.logger.info(
-                f"Port: {p.device}, Description: {p.description}, Hardware ID: {p.hwid}"
-            )
-
-            # Check for FTDI devices with VID 0403 and PID 6001
-            if "VID:PID=0403:6001" in p.hwid or "VID_0403&PID_6001" in p.hwid:
+        for p in serial.tools.list_ports.comports():
+            # Check if manufacturer exists and contains FTDI
+            if p.manufacturer and ("FTDI" in p.manufacturer or "ftdi" in p.manufacturer.lower()):
                 ftdi_ports.append(p.device)
-                context.logger.info(f"Found FTDI device at {p.device}")
-
-        if ftdi_ports:
-            context.logger.info(f"Found {len(ftdi_ports)} FTDI devices: {ftdi_ports}")
-            ports_to_try = ftdi_ports
-        else:
-            context.logger.warning(
-                "No FTDI devices found, will try all available ports"
+                
+        if not ftdi_ports or should_simulate_failure(FailureCodes.DEVICE_NOT_FOUND.value):
+            return TestResult(
+                "No FTDI devices found",
+                FailureCodes.DEVICE_NOT_FOUND
             )
-            ports_to_try = available_ports
-    else:
-        ports_to_try = [port]
-
-    # Try connecting to each port in order
-    for test_port in ports_to_try:
-        context.set_banner(f"Trying port {test_port}...", "info", BannerState.SHOWING)
-
-        try:
-            # Create driver and attempt connection
+            
+        # Try each FTDI port
+        for test_port in ftdi_ports:
             driver = TasmotaSerialDriver(test_port, baudrate)
-            if driver.connect():
-                # Get device information
-                status = driver.get_status()
-                firmware_version = driver.get_firmware_version()
-
-                # Disconnect when done
-                driver.disconnect()
-
-                context.set_banner(
-                    f"Connected to Tasmota device on {test_port}",
-                    "success",
-                    BannerState.SHOWING,
-                )
-
+            if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+                continue
+                
+            # Get device info to verify it's a Tasmota device
+            device_info = driver.get_device_info()
+            if device_info and not should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
                 return TestResult(
                     f"Connected to Tasmota device on {test_port}",
                     FailureCodes.NO_FAILURE,
                     return_value={
                         "port": test_port,
-                        "baudrate": baudrate,
-                        "firmware_version": firmware_version,
-                        "device_info": status,
-                    },
+                        "device_info": device_info
+                    }
                 )
-        except Exception as e:
-            context.logger.warning(f"Failed to connect to {test_port}: {str(e)}")
-            # Continue to next port
-
-    # If we get here, no suitable port was found
-    if not port and len(ftdi_ports) == 0:
-        context.set_banner(
-            "No FTDI USB-to-Serial devices found", "error", BannerState.SHOWING
-        )
+            driver.disconnect()
+                
         return TestResult(
-            "No FTDI USB-to-Serial devices found. Please connect an FTDI adapter with VID 0403 and PID 6001.",
-            FailureCodes.FTDI_DEVICE_NOT_FOUND,
-            return_value={
-                "available_ports": available_ports,
-                "port_details": [
-                    {"device": p.device, "description": p.description, "hwid": p.hwid}
-                    for p in all_ports
-                ],
-            },
+            "No Tasmota devices found on FTDI ports",
+            FailureCodes.DEVICE_NOT_FOUND
         )
-    else:
-        context.set_banner("No Tasmota device found", "error", BannerState.SHOWING)
+    
+    # Try specified port
+    driver = TasmotaSerialDriver(port, baudrate)
+    if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
         return TestResult(
-            "Failed to detect Tasmota device on any available port",
-            FailureCodes.CONNECTION_FAILED,
-            return_value={"available_ports": available_ports},
+            f"Failed to connect to {port}",
+            FailureCodes.CONNECTION_ERROR
         )
-
-
-@test()
-def test_relay_control(
-    category: str = None,
-    test_name: str = None,
-    port: str = None,
-    relay_number: int = 1,
-    test_cycles: int = 3,
-    delay_between_cycles: float = 1.0,
-) -> TestResult:
-    """Test controlling a Tasmota relay by turning it on and off multiple times.
-
-    Args:
-        category (str, optional): Test category. Used internally by the test framework.
-        test_name (str, optional): Test name. Used internally by the test framework.
-        port (str): Serial port to use.
-        relay_number (int, optional): Relay number to test. Defaults to 1.
-        test_cycles (int, optional): Number of on/off cycles to test. Defaults to 3.
-        delay_between_cycles (float, optional): Delay between cycles in seconds. Defaults to 1.0.
-
-    Returns:
-        TestResult: Test result with possible outcomes:
-            - Success (NO_FAILURE):
-                "Relay control test completed successfully"
-                return_value: {
-                    "port": Serial port used,
-                    "relay_number": Relay number tested,
-                    "cycles_completed": Number of cycles completed,
-                    "final_state": Final relay state
-                }
-
-            - Failure (CONNECTION_FAILED):
-                "Failed to connect to Tasmota device on {port}"
-
-            - Failure (RELAY_CONTROL_FAILED):
-                "Failed to control relay {relay_number}"
-                return_value: {
-                    "port": Port used,
-                    "relay_number": Relay number,
-                    "cycles_completed": Number of cycles completed before failure,
-                    "failed_operation": Operation that failed ("ON" or "OFF"),
-                    "error": Error message
-                }
-
-            - Failure (RELAY_STATE_MISMATCH):
-                "Relay state does not match expected state"
-                return_value: {
-                    "port": Port used,
-                    "relay_number": Relay number,
-                    "cycles_completed": Number of cycles completed before failure,
-                    "expected_state": Expected relay state,
-                    "actual_state": Actual relay state
-                }
-    """
-    context = gcc()
-    max_retries = 3
-    retry_delay = 1.0
-
-    # Helper function to set relay state with retries
-    def set_relay_state(driver, state, relay_num, operation_name):
-        state_str = "ON" if state else "OFF"
-        success = False
-
-        for retry in range(max_retries):
-            if driver.set_power(state, relay_num):
-                success = True
-                break
-            else:
-                context.logger.warning(
-                    f"Failed to turn {state_str} relay, retry {retry+1}/{max_retries}"
-                )
-                time.sleep(retry_delay)
-
-        if not success:
-            return TestResult(
-                f"Failed to turn {state_str} relay {relay_num}",
-                FailureCodes.RELAY_CONTROL_FAILED,
-                return_value={
-                    "port": port,
-                    "relay_number": relay_num,
-                    "cycles_completed": cycles_completed,
-                    "failed_operation": operation_name,
-                },
-            )
-        return None  # No error
-
-    # Helper function to verify relay state with retries
-    def verify_relay_state(driver, expected_state, relay_num, operation_name):
-        state_str = "ON" if expected_state else "OFF"
-        state = None
-
-        for retry in range(max_retries):
-            state = driver.get_power_state(relay_num)
-            if state is expected_state:
-                break
-            else:
-                context.logger.warning(
-                    f"Relay state verification failed. Expected: {state_str}, Got: {state}. Retry {retry+1}/{max_retries}"
-                )
-                time.sleep(retry_delay * (retry + 1))  # Increasing delay for each retry
-
-        if state is not expected_state:
-            return TestResult(
-                f"Relay {relay_num} state does not match expected state",
-                FailureCodes.RELAY_STATE_MISMATCH,
-                return_value={
-                    "port": port,
-                    "relay_number": relay_num,
-                    "cycles_completed": cycles_completed,
-                    "expected_state": expected_state,
-                    "actual_state": state,
-                },
-            )
-        return None  # No error
-
-    if not port:
-        # Try to auto-detect port if not specified
-        detect_result = detect_tasmota_serial_port(category, "Auto-detect port")
-        if detect_result.failure_code != FailureCodes.NO_FAILURE:
-            return detect_result
-        port = detect_result.return_value["port"]
-
-    context.set_banner(
-        f"Testing relay {relay_number} control...", "info", BannerState.SHOWING
-    )
-
-    # Connect to the device
-    driver = TasmotaSerialDriver(port)
-    if not driver.connect():
-        context.set_banner(
-            f"Failed to connect to Tasmota device on {port}",
-            "error",
-            BannerState.SHOWING,
-        )
+        
+    device_info = driver.get_device_info()
+    if device_info and not should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
         return TestResult(
-            f"Failed to connect to Tasmota device on {port}",
-            FailureCodes.CONNECTION_FAILED,
-        )
-
-    cycles_completed = 0
-    final_state = None
-
-    try:
-        # First, check if the device has the specified relay
-        context.logger.info(f"Checking if relay {relay_number} exists")
-
-        # Get device status to check available relays
-        status = driver.get_status()
-        if status:
-            context.logger.debug(f"Device status: {status}")
-
-            # Check if we can find information about relays
-            if "Status" in status:
-                # Look for Power field which indicates relay support
-                if "Power" in status["Status"]:
-                    context.logger.info(
-                        f"Device has Power field: {status['Status']['Power']}"
-                    )
-                else:
-                    context.logger.warning(
-                        f"No Power field found in Status. Available fields: {list(status['Status'].keys())}"
-                    )
-
-        # Get initial state with retries
-        context.logger.info(f"Getting initial state of relay {relay_number}")
-        initial_state = None
-        for retry in range(max_retries):
-            initial_state = driver.get_power_state(relay_number)
-            if initial_state is not None:
-                context.logger.info(
-                    f"Initial state of relay {relay_number}: {'ON' if initial_state else 'OFF'}"
-                )
-                break
-            else:
-                context.logger.warning(
-                    f"Failed to get initial state, retry {retry+1}/{max_retries}"
-                )
-                time.sleep(retry_delay)
-
-        # If we still couldn't determine the state, try using Status 11 command directly
-        if initial_state is None:
-            context.logger.info("Initial state query failed, trying Status 11 command")
-            status_response = driver.send_command("Status 11", wait_time=1.0)
-            if status_response:
-                context.logger.info(f"Status 11 response: {status_response}")
-
-                # Try to determine if the device has relays from the status
-                if "StatusSTS" in status_response:
-                    status_sts = status_response["StatusSTS"]
-                    context.logger.info(f"StatusSTS keys: {list(status_sts.keys())}")
-
-                    # Check if POWER field exists (for single relay devices)
-                    if "POWER" in status_sts:
-                        context.logger.info(f"Found POWER field: {status_sts['POWER']}")
-                        # Use this as the initial state for relay 1
-                        if relay_number == 1:
-                            initial_state = status_sts["POWER"] == "ON"
-                            context.logger.info(
-                                f"Using POWER field as initial state: {initial_state}"
-                            )
-
-                    # Check for POWER1, POWER2, etc. (for multi-relay devices)
-                    power_key = f"POWER{relay_number}"
-                    if power_key in status_sts:
-                        context.logger.info(
-                            f"Found {power_key} field: {status_sts[power_key]}"
-                        )
-                        initial_state = status_sts[power_key] == "ON"
-                        context.logger.info(
-                            f"Using {power_key} field as initial state: {initial_state}"
-                        )
-                elif "raw_response" in status_response:
-                    # Try to parse the raw response
-                    raw = status_response["raw_response"].upper()
-                    context.logger.debug(f"Raw Status 11 response: {raw}")
-
-                    # Look for power state in the raw response
-                    if relay_number == 1:
-                        if (
-                            '"POWER":"ON"' in raw
-                            or "POWER: ON" in raw
-                            or "POWER=ON" in raw
-                            or "POWER ON" in raw
-                        ):
-                            context.logger.info(
-                                "Found power state ON in raw Status 11 response"
-                            )
-                            initial_state = True
-                        elif (
-                            '"POWER":"OFF"' in raw
-                            or "POWER: OFF" in raw
-                            or "POWER=OFF" in raw
-                            or "POWER OFF" in raw
-                        ):
-                            context.logger.info(
-                                "Found power state OFF in raw Status 11 response"
-                            )
-                            initial_state = False
-                    else:
-                        power_key = f"POWER{relay_number}"
-                        if (
-                            f'"{power_key}":"ON"' in raw
-                            or f"{power_key}: ON" in raw
-                            or f"{power_key}=ON" in raw
-                            or f"{power_key} ON" in raw
-                        ):
-                            context.logger.info(
-                                f"Found {power_key} state ON in raw Status 11 response"
-                            )
-                            initial_state = True
-                        elif (
-                            f'"{power_key}":"OFF"' in raw
-                            or f"{power_key}: OFF" in raw
-                            or f"{power_key}=OFF" in raw
-                            or f"{power_key} OFF" in raw
-                        ):
-                            context.logger.info(
-                                f"Found {power_key} state OFF in raw Status 11 response"
-                            )
-                            initial_state = False
-
-        # If we still couldn't determine the state, try setting it to OFF first
-        if initial_state is None:
-            context.logger.warning(
-                f"Could not determine initial state of relay {relay_number}, setting to OFF first"
-            )
-            error = set_relay_state(driver, False, relay_number, "OFF (initial)")
-            if error:
-                return error
-
-            # Verify the state
-            time.sleep(delay_between_cycles)
-            error = verify_relay_state(driver, False, relay_number, "OFF (initial)")
-            if error:
-                return TestResult(
-                    f"Failed to get initial state of relay {relay_number} and could not set it to a known state",
-                    FailureCodes.INVALID_RESPONSE,
-                    return_value={
-                        "port": port,
-                        "relay_number": relay_number,
-                        "cycles_completed": 0,
-                        "error": "Could not determine or set initial relay state",
-                    },
-                )
-
-            initial_state = False
-
-        # Run test cycles
-        for cycle in range(test_cycles):
-            # If the relay is already ON, toggle it OFF first to ensure we can test the ON transition
-            if cycle == 0 and initial_state is True:
-                context.logger.info(
-                    f"Relay is already ON, toggling OFF first to test ON transition"
-                )
-                context.set_banner(
-                    f"Preparing for cycle 1/{test_cycles}: Turning relay {relay_number} OFF first",
-                    "info",
-                    BannerState.SHOWING,
-                )
-
-                # Turn relay OFF and verify
-                error = set_relay_state(
-                    driver, False, relay_number, "OFF (preparation)"
-                )
-                if error:
-                    return error
-
-                time.sleep(delay_between_cycles)
-                error = verify_relay_state(
-                    driver, False, relay_number, "OFF (preparation)"
-                )
-                if error:
-                    return error
-
-                # Wait before starting the actual test cycle
-                time.sleep(delay_between_cycles)
-
-            # Turn relay ON
-            context.set_banner(
-                f"Cycle {cycle+1}/{test_cycles}: Turning relay {relay_number} ON",
-                "info",
-                BannerState.SHOWING,
-            )
-
-            error = set_relay_state(driver, True, relay_number, "ON")
-            if error:
-                return error
-
-            # Verify ON state
-            time.sleep(delay_between_cycles)
-            error = verify_relay_state(driver, True, relay_number, "ON")
-            if error:
-                return error
-
-            # Wait between state changes
-            time.sleep(delay_between_cycles)
-
-            # Turn relay OFF
-            context.set_banner(
-                f"Cycle {cycle+1}/{test_cycles}: Turning relay {relay_number} OFF",
-                "info",
-                BannerState.SHOWING,
-            )
-
-            error = set_relay_state(driver, False, relay_number, "OFF")
-            if error:
-                return error
-
-            # Verify OFF state
-            time.sleep(delay_between_cycles)
-            error = verify_relay_state(driver, False, relay_number, "OFF")
-            if error:
-                return error
-
-            # Wait between cycles
-            if cycle < test_cycles - 1:
-                time.sleep(delay_between_cycles)
-
-            cycles_completed += 1
-
-        # Restore initial state
-        error = set_relay_state(driver, initial_state, relay_number, "restore")
-        if error:
-            context.logger.warning("Failed to restore relay to initial state")
-        else:
-            final_state = driver.get_power_state(relay_number)
-            context.logger.info(
-                f"Restored relay to initial state: {'ON' if final_state else 'OFF'}"
-            )
-
-        context.set_banner(
-            f"Relay control test completed successfully", "success", BannerState.SHOWING
-        )
-
-        return TestResult(
-            "Relay control test completed successfully",
+            f"Connected to Tasmota device on {port}",
             FailureCodes.NO_FAILURE,
             return_value={
                 "port": port,
-                "relay_number": relay_number,
-                "cycles_completed": cycles_completed,
-                "final_state": final_state,
-            },
+                "device_info": device_info
+            }
         )
-    except Exception as e:
-        context.logger.error(f"Exception during relay control test: {str(e)}")
-        import traceback
-
-        context.logger.error(traceback.format_exc())
-        return TestResult(
-            f"Exception during relay control test: {str(e)}",
-            FailureCodes.EXCEPTION,
-            return_value={
-                "port": port,
-                "relay_number": relay_number,
-                "cycles_completed": cycles_completed,
-                "error": str(e),
-            },
-        )
-    finally:
-        # Always disconnect when done
-        driver.disconnect()
-
+    
+    driver.disconnect()
+    return TestResult(
+        f"Device on {port} is not a Tasmota device",
+        FailureCodes.DEVICE_NOT_FOUND
+    )
 
 @test()
 def check_firmware_version(
-    category: str = None,
-    test_name: str = None,
-    port: str = None,
-    min_version: str = None,
+    category: str,
+    test_name: str,
+    port: str,
+    min_version: str
 ) -> TestResult:
-    """Check if the Tasmota firmware version meets the minimum requirement.
-
+    """Check Tasmota firmware version.
+    
     Args:
-        category (str, optional): Test category. Used internally by the test framework.
-        test_name (str, optional): Test name. Used internally by the test framework.
-        port (str): Serial port to use.
-        min_version (str, optional): Minimum required firmware version (e.g., "9.5.0").
-            If None, just reports the current version without checking.
-
+        category: Test category for reporting and organization
+        test_name: Name of this specific test instance
+        port: Serial port
+        min_version: Minimum required version
+        
     Returns:
-        TestResult: Test result with possible outcomes:
-            - Success (NO_FAILURE):
-                "Firmware version {version} meets minimum requirement {min_version}"
-                or "Current firmware version: {version}"
-                return_value: {
-                    "firmware_version": Current firmware version,
-                    "min_version": Minimum required version (if specified)
-                }
-
-            - Failure (CONNECTION_FAILED):
-                "Failed to connect to Tasmota device on {port}"
-
-            - Failure (INVALID_RESPONSE):
-                "Failed to get firmware version"
-
-            - Failure (FIRMWARE_VERSION_MISMATCH):
-                "Firmware version {version} does not meet minimum requirement {min_version}"
-                return_value: {
-                    "firmware_version": Current firmware version,
-                    "min_version": Minimum required version
-                }
+        TestResult with firmware version
     """
-    context = gcc()
-
-    if not port:
-        # Try to auto-detect port if not specified
-        detect_result = detect_tasmota_serial_port(category, "Auto-detect port")
-        if detect_result.failure_code != FailureCodes.NO_FAILURE:
-            return detect_result
-        port = detect_result.return_value["port"]
-
-    context.set_banner("Checking firmware version...", "info", BannerState.SHOWING)
-
-    # Connect to the device
     driver = TasmotaSerialDriver(port)
-    if not driver.connect():
-        context.set_banner(
-            f"Failed to connect to Tasmota device on {port}",
-            "error",
-            BannerState.SHOWING,
-        )
+    if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
         return TestResult(
-            f"Failed to connect to Tasmota device on {port}",
-            FailureCodes.CONNECTION_FAILED,
+            f"Failed to connect to {port}",
+            FailureCodes.CONNECTION_ERROR
         )
-
+        
     try:
-        # Get firmware version
         version = driver.get_firmware_version()
-        if not version:
-            context.set_banner(
-                "Failed to get firmware version", "error", BannerState.SHOWING
-            )
+        if not version or should_simulate_failure(FailureCodes.FIRMWARE_ERROR.value):
             return TestResult(
                 "Failed to get firmware version",
-                FailureCodes.INVALID_RESPONSE,
-                return_value={"port": port},
+                FailureCodes.FIRMWARE_ERROR
             )
-
-        # If min_version is specified, check if current version meets requirement
-        if min_version:
-            context.logger.info(
-                f"Comparing version '{version}' with minimum required '{min_version}'"
-            )
-
-            # Clean up version strings to get just the numeric parts
-            clean_version = extract_version_numbers(version)
-            clean_min_version = extract_version_numbers(min_version)
-
-            context.logger.info(
-                f"Extracted version numbers: '{clean_version}' vs '{clean_min_version}'"
-            )
-
-            try:
-                # Compare versions
-                meets_requirement = compare_versions(version, min_version)
-
-                if meets_requirement:
-                    context.set_banner(
-                        f"Firmware version {version} meets minimum requirement",
-                        "success",
-                        BannerState.SHOWING,
-                    )
-                    return TestResult(
-                        f"Firmware version {version} meets minimum requirement {min_version}",
-                        FailureCodes.NO_FAILURE,
-                        return_value={
-                            "firmware_version": version,
-                            "min_version": min_version,
-                        },
-                    )
-                else:
-                    context.set_banner(
-                        f"Firmware version {version} does not meet minimum requirement",
-                        "error",
-                        BannerState.SHOWING,
-                    )
-                    return TestResult(
-                        f"Firmware version {version} does not meet minimum requirement {min_version}",
-                        FailureCodes.FIRMWARE_VERSION_MISMATCH,
-                        return_value={
-                            "firmware_version": version,
-                            "min_version": min_version,
-                        },
-                    )
-            except Exception as e:
-                context.logger.error(f"Error comparing versions: {str(e)}")
-                # If version comparison fails, just report the current version
-                context.set_banner(
-                    f"Could not compare versions, current firmware: {version}",
-                    "warning",
-                    BannerState.SHOWING,
-                )
-                return TestResult(
-                    f"Could not compare versions: {str(e)}. Current firmware: {version}",
-                    FailureCodes.NO_FAILURE,
-                    return_value={
-                        "firmware_version": version,
-                        "min_version": min_version,
-                    },
-                )
-        else:
-            # Just report the current version
-            context.set_banner(
-                f"Current firmware version: {version}", "info", BannerState.SHOWING
-            )
+            
+        # Parse version strings
+        current = parse_version(version)
+        minimum = parse_version(min_version)
+        
+        if current >= minimum and not should_simulate_failure(FailureCodes.FIRMWARE_ERROR.value):
             return TestResult(
-                f"Current firmware version: {version}",
+                f"Firmware version {version} meets minimum {min_version}",
                 FailureCodes.NO_FAILURE,
-                return_value={"firmware_version": version},
+                return_value={"firmware_version": version}
             )
-
-    except Exception as e:
-        context.set_banner(
-            f"Error checking firmware version: {str(e)}", "error", BannerState.SHOWING
-        )
-        return TestResult(
-            f"Error checking firmware version: {str(e)}",
-            FailureCodes.EXCEPTION,
-            return_value={"error": str(e)},
-        )
-
+        else:
+            return TestResult(
+                f"Firmware version {version} below minimum {min_version}",
+                FailureCodes.FIRMWARE_ERROR
+            )
+            
     finally:
-        # Always disconnect
         driver.disconnect()
 
+def scan_ip(ip: str, ports: List[int], timeout: float = 0.1) -> Optional[Dict[str, Any]]:
+    """Scan a single IP address for Rigol oscilloscopes.
+    
+    Args:
+        ip: IP address to scan
+        ports: List of ports to try
+        timeout: Socket timeout in seconds
+        
+    Returns:
+        Dict with device info if found, None otherwise
+    """
+    context = gcc()
+    context.logger.debug(f"Scanning {ip}")
+    
+    for port in ports:
+        # First check if port is open
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            s.connect((ip, port))
+            s.close()
+            
+            # Port is open, try to connect as oscilloscope
+            scope = RigolOscilloscopeDriver(ip, port, logger=context.logger)
+            if scope.connect():
+                try:
+                    idn = scope.get_idn()
+                    if any(model in idn.upper() for model in [
+                        "RIGOL", "DS1", "DS2", "DS4", "DS6", "DS7", "MSO5", "MSO7"
+                    ]):
+                        return {
+                            "ip": ip,
+                            "port": port,
+                            "idn": idn
+                        }
+                finally:
+                    scope.disconnect()
+        except (socket.timeout, socket.error, OSError):
+            continue
+        except Exception as e:
+            context.logger.debug(f"Error scanning {ip}:{port} - {str(e)}")
+            continue
+            
+    return None
+
+@test()
+def detect_oscilloscope(
+    category: str,
+    test_name: str,
+    ip_address: str = None,
+    port: int = 5555,
+    timeout: float = 1.0
+) -> TestResult:
+    """Check if a Rigol oscilloscope is available at the specified IP.
+    
+    Args:
+        category: Test category for reporting and organization
+        test_name: Name of this specific test instance
+        ip_address: Oscilloscope IP address
+        port: SCPI port (default: 5555)
+        timeout: Connection timeout in seconds
+        
+    Returns:
+        TestResult with oscilloscope info
+    """
+    context = gcc()
+    
+    # Require IP address
+    if not ip_address:
+        return TestResult(
+            "No oscilloscope IP address provided",
+            FailureCodes.OSCILLOSCOPE_ERROR
+        )
+    
+    # Try to connect to oscilloscope
+    try:
+        # First check if port is open
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        
+        try:
+            s.connect((ip_address, port))
+            s.close()
+        except (socket.timeout, socket.error, OSError):
+            return TestResult(
+                f"Could not connect to {ip_address}:{port}",
+                FailureCodes.OSCILLOSCOPE_ERROR
+            )
+            
+        # Port is open, try to connect as oscilloscope
+        scope = RigolOscilloscopeDriver(ip_address, port, logger=context.logger)
+        if not scope.connect() or should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
+            return TestResult(
+                f"Failed to connect to oscilloscope at {ip_address}",
+                FailureCodes.OSCILLOSCOPE_ERROR
+            )
+            
+        try:
+            # Get device ID
+            idn = scope.get_idn()
+            
+            # Check if it's a Rigol scope
+            if any(model in idn.upper() for model in [
+                "RIGOL", "DS1", "DS2", "DS4", "DS6", "DS7", "MSO5", "MSO7"
+            ]) and not should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
+                context.logger.info(f"Found oscilloscope at {ip_address}: {idn}")
+                return TestResult(
+                    f"Found Rigol oscilloscope at {ip_address}",
+                    FailureCodes.NO_FAILURE,
+                    return_value={
+                        "oscilloscope_ip": ip_address,
+                        "oscilloscope_port": port,
+                        "oscilloscope_idn": idn
+                    }
+                )
+            else:
+                context.logger.error(f"Device at {ip_address} is not a Rigol oscilloscope")
+                context.logger.error(f"Device ID: {idn}")
+                return TestResult(
+                    f"Device at {ip_address} is not a Rigol oscilloscope",
+                    FailureCodes.OSCILLOSCOPE_ERROR
+                )
+                
+        finally:
+            scope.disconnect()
+            
+    except Exception as e:
+        context.logger.error(f"Error checking oscilloscope at {ip_address}: {str(e)}")
+        return TestResult(
+            f"Error checking oscilloscope at {ip_address}: {str(e)}",
+            FailureCodes.OSCILLOSCOPE_ERROR
+        )
+        
+    return TestResult(
+        f"No Rigol oscilloscope found at {ip_address}",
+        FailureCodes.OSCILLOSCOPE_ERROR
+    )
 
 @test()
 def connect_oscilloscope(
-    category: str = None,
-    test_name: str = None,
-    oscilloscope_ip: str = None,
-    oscilloscope_port: int = 5555,
-    timebase: float = 0.001,  # 1ms/div
+    category: str,
+    test_name: str,
+    ip_address: str,
+    port: int = 5555,
+    timebase: float = 0.005  # Default to 5ms/div for 60Hz AC
 ) -> TestResult:
-    """Connect to a Rigol oscilloscope and set it up for relay testing.
-
+    """Connect to and configure the oscilloscope for AC line measurements.
+    
     Args:
-        category (str, optional): Test category. Used internally by the test framework.
-        test_name (str, optional): Test name. Used internally by the test framework.
-        oscilloscope_ip (str): IP address of the Rigol oscilloscope.
-        oscilloscope_port (int, optional): Port for the oscilloscope. Defaults to 5555.
-        timebase (float, optional): Oscilloscope timebase in seconds/div. Defaults to 0.001 (1ms/div).
-
+        category: Test category for reporting and organization
+        test_name: Name of this specific test instance
+        ip_address: IP address of the oscilloscope
+        port: SCPI port (default: 5555)
+        timebase: Timebase in seconds/div (default: 0.005 = 5ms/div)
+        
     Returns:
-        TestResult: Test result with possible outcomes:
-            - Success (NO_FAILURE):
-                "Connected to oscilloscope successfully"
-                return_value: {
-                    "oscilloscope": RigolOscilloscopeDriver instance
-                }
-
-            - Failure (OSCILLOSCOPE_CONNECTION_FAILED):
-                "Failed to connect to oscilloscope at {oscilloscope_ip}"
-                Condition: Unable to connect to the oscilloscope
+        TestResult: Test result with oscilloscope settings
     """
     context = gcc()
-
-    if not oscilloscope_ip:
+    logger = context.logger
+    logger.info(f"Starting {test_name}")
+    
+    try:
+        # Connect to oscilloscope
+        scope = RigolOscilloscopeDriver(ip_address, port, logger=logger)
+        if not scope.connect():
+            return TestResult(
+                "Failed to connect to oscilloscope",
+                FailureCodes.OSCILLOSCOPE_ERROR
+            )
+            
+        # Get scope ID for verification
+        scope_id = scope.get_idn()
+        logger.info(f"Connected to oscilloscope: {scope_id}")
+        
+        # Store scope in context for other tests to use
+        context.document["_oscilloscope"] = scope
+        
+        # Reset scope and stop acquisition
+        scope.send_command("*RST")
+        time.sleep(2)  # Give scope time to reset
+        scope.send_command(":STOP")
+        time.sleep(1)
+        
+        # Set timebase first (5ms/div shows ~3 cycles of 60Hz)
+        logger.info("Setting timebase...")
+        max_retries = 3
+        for attempt in range(max_retries):
+            scope.send_command(f":TIMebase:SCALe {timebase}")
+            time.sleep(0.2)
+            
+            # Verify timebase
+            actual_timebase = scope.query(":TIMebase:SCALe?")
+            time.sleep(0.1)
+            
+            try:
+                actual_value = float(actual_timebase)
+                if abs(actual_value - timebase) <= timebase * 0.01:  # 1% tolerance
+                    logger.info(f"Timebase set to {actual_value} s/div")
+                    break
+                else:
+                    logger.warning(f"Timebase verification failed: wanted {timebase}, got {actual_value}")
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5)
+            except (ValueError, TypeError):
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                    
+        # Setup channel for AC line measurement
+        logger.info("Setting up channel...")
+        scope.send_command(":CHANnel1:DISPlay ON")
+        time.sleep(0.1)
+        scope.send_command(":CHANnel1:COUPling AC")
+        time.sleep(0.1)
+        
+        # Configure probe settings
+        scope.send_command(":CHANnel1:IMPedance ONEMeg")  # 1MΩ for voltage probe
+        time.sleep(0.1)
+        scope.send_command(":CHANnel1:PROBe 10")  # 10X probe
+        time.sleep(0.1)
+        scope.send_command(":CHANnel1:PROBe:BIAS 0")  # No DC bias
+        time.sleep(0.1)
+        
+        # Set vertical scale (50V/div * 10X probe = 500V full scale)
+        scope.send_command(":CHANnel1:SCALe 50")
+        time.sleep(0.1)
+        
+        # Setup trigger for AC line
+        logger.info("Setting up trigger...")
+        scope.send_command(":TRIGger:MODE EDGE")
+        time.sleep(0.1)
+        scope.send_command(":TRIGger:EDGE:SOURce CHANnel1")
+        time.sleep(0.1)
+        scope.send_command(":TRIGger:EDGE:SLOPe POSitive")
+        time.sleep(0.1)
+        scope.send_command(":TRIGger:EDGE:LEVel 25")  # ~25V for 120VAC
+        time.sleep(0.1)
+        scope.send_command(":TRIGger:COUPling AC")
+        time.sleep(0.1)
+        scope.send_command(":TRIGger:SWEep NORMal")
+        time.sleep(0.1)
+        
+        # Setup measurements
+        logger.info("Setting up measurements...")
+        scope.send_command(":MEASure:CLEar ALL")
+        time.sleep(0.1)
+        scope.send_command(":MEASure:ITEM FREQuency,CHANnel1")
+        time.sleep(0.1)
+        scope.send_command(":MEASure:ITEM VPP,CHANnel1")
+        time.sleep(0.1)
+        scope.send_command(":MEASure:ITEM VRMS,CHANnel1")
+        time.sleep(0.1)
+        
+        # Start acquisition with force trigger
+        logger.info("Starting acquisition...")
+        scope.send_command(":RUN")
+        time.sleep(0.1)
+        scope.send_command(":TFORce")
+        time.sleep(3)  # Wait for acquisition
+        
+        # Verify settings
+        vscale = scope.query(":CHANnel1:SCALe?")
+        tscale = scope.query(":TIMebase:SCALe?")
+        logger.info(f"Final settings - Vertical: {float(vscale)}V/div, Timebase: {float(tscale)}s/div")
+        
+        # Return success with scope settings (not the scope object)
         return TestResult(
-            "Oscilloscope IP address not specified",
-            FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
+            "Successfully connected and configured oscilloscope",
+            FailureCodes.NO_FAILURE,
+            return_value={
+                "scope_id": scope_id,
+                "vertical_scale": float(vscale),
+                "timebase": float(tscale)
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error configuring oscilloscope: {str(e)}")
+        if 'scope' in locals():
+            scope.disconnect()
+        return TestResult(
+            f"Failed to configure oscilloscope: {str(e)}",
+            FailureCodes.OSCILLOSCOPE_ERROR
         )
 
-    # Connect to the oscilloscope
-    context.logger.info(f"Connecting to oscilloscope at {oscilloscope_ip}...")
-    oscilloscope = RigolOscilloscopeDriver(oscilloscope_ip, oscilloscope_port)
+def capture_relay_transition(
+    oscilloscope: RigolOscilloscopeDriver,
+    tasmota: TasmotaSerialDriver,
+    relay_number: int,
+    turn_on: bool,
+    logger
+) -> Optional[np.ndarray]:
+    """Capture relay transition waveform.
+    
+    Args:
+        oscilloscope: Configured oscilloscope instance
+        tasmota: Connected Tasmota device
+        relay_number: Relay number to test
+        turn_on: True to capture turn-on, False for turn-off
+        logger: Logger instance
+        
+    Returns:
+        Optional[np.ndarray]: Waveform data if captured successfully
+    """
+    try:
+        # Get context to access config
+        context = gcc()
+        failure_chance = context.document.get("_cell_config_obj", {}).get("randomly_fail", 0.0)
+        
+        # Configure single trigger for relay test
+        oscilloscope.send_command(":TRIGger:SWEep SINGle")
+        time.sleep(0.1)
+        
+        # Arm trigger and wait for ready
+        oscilloscope.send_command(":SINGle")
+        time.sleep(1)
+        
+        # Toggle relay (unless simulating failure)
+        action = "on" if turn_on else "off"
+        logger.info(f"Turning relay {relay_number} {action}")
+        
+        if turn_on and failure_chance and random.random() < failure_chance:
+            # Simulate mechanical failure by not actually turning on the relay
+            logger.info("Simulating mechanical failure - relay did not actuate")
+            time.sleep(0.1)
+        else:
+            if not tasmota.set_power(turn_on, relay_number):
+                return None
+            time.sleep(0.1)
+        
+        # Wait for trigger and capture
+        timeout = 5  # seconds
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            status = oscilloscope.query(":TRIGger:STATus?")
+            if status.strip() == "STOP":
+                logger.info(f"Captured relay {action} transition")
+                break
+            time.sleep(0.1)
+        else:
+            logger.warning(f"Timeout waiting for relay {action} transition capture")
+            return None
+        
+        # Get waveform data
+        return oscilloscope.capture_waveform(channel=1)
+        
+    except Exception as e:
+        logger.error(f"Error in capture_relay_transition: {str(e)}")
+        return None
 
-    if not oscilloscope.connect():
-        return TestResult(
-            f"Failed to connect to oscilloscope at {oscilloscope_ip}",
-            FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
-        )
-
-    # Setup the oscilloscope for relay testing
-    context.logger.info("Setting up oscilloscope for relay testing...")
-    if not oscilloscope.setup_for_relay_test(channel=1, timebase=timebase):
-        oscilloscope.disconnect()
-        return TestResult(
-            "Failed to setup oscilloscope",
-            FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
-        )
-
-    return TestResult(
-        "Connected to oscilloscope successfully",
-        return_value={"oscilloscope": oscilloscope},
-    )
-
+def save_measurements_to_csv(measurements: dict, filename: str):
+    """Save measurements to CSV file.
+    
+    Args:
+        measurements: Dictionary of measurements
+        filename: Output CSV filename
+    """
+    try:
+        # Flatten nested dictionaries
+        flat_data = {}
+        for key, value in measurements.items():
+            if isinstance(value, dict):
+                for subkey, subvalue in value.items():
+                    flat_data[f"{key}_{subkey}"] = subvalue
+            elif isinstance(value, list):
+                for i, val in enumerate(value):
+                    flat_data[f"{key}_{i+1}"] = val
+            else:
+                flat_data[key] = value
+        
+        # Write to CSV
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=flat_data.keys())
+            writer.writeheader()
+            writer.writerow(flat_data)
+            
+    except Exception as e:
+        gcc().logger.error(f"Error saving measurements to CSV: {str(e)}")
 
 @test()
-def test_relay_response_profile(
-    category: str = None,
-    test_name: str = None,
-    port: str = None,
-    relay_number: int = 1,
-    oscilloscope_ip: str = None,
-    oscilloscope_port: int = 5555,
-    output_dir: str = "waveforms",
-    timebase: float = 0.001,  # 1ms/div
-    oscilloscope_instance=None,  # New parameter to accept an existing oscilloscope instance
+def test_relay_response(
+    category: str,
+    test_name: str,
+    serial_port: str,
+    relay_number: int = 1
 ) -> TestResult:
-    """Test relay response profile using a Rigol oscilloscope.
-
-    This test connects to a Tasmota relay and a Rigol oscilloscope to measure
-    the relay's response time and contact bounce. It captures waveforms for
-    both rising (OFF->ON) and falling (ON->OFF) transitions.
-
+    """Test relay response characteristics using oscilloscope measurements.
+    
     Args:
-        category (str, optional): Test category. Used internally by the test framework.
-        test_name (str, optional): Test name. Used internally by the test framework.
-        port (str): Serial port for the Tasmota device.
-        relay_number (int, optional): Relay number to test. Defaults to 1.
-        oscilloscope_ip (str): IP address of the Rigol oscilloscope.
-        oscilloscope_port (int, optional): Port for the oscilloscope. Defaults to 5555.
-        output_dir (str, optional): Directory to save waveform data. Defaults to "waveforms".
-        timebase (float, optional): Oscilloscope timebase in seconds/div. Defaults to 0.001 (1ms/div).
-        oscilloscope_instance: An existing oscilloscope instance from connect_oscilloscope.
-
+        category: Test category for reporting and organization
+        test_name: Name of this specific test instance
+        serial_port: Serial port for Tasmota device
+        relay_number: Relay number to test (default: 1)
+        
     Returns:
-        TestResult: Test result with possible outcomes:
-            - Success (NO_FAILURE):
-                "Relay response profile test completed successfully"
-                return_value: {
-                    "rising_edge": {
-                        "transition_time": Rise time in ms,
-                        "bounce_count": Number of bounces,
-                        "bounce_duration": Total bounce duration in ms,
-                        "waveform_file": Path to CSV file with waveform data
-                    },
-                    "falling_edge": {
-                        "transition_time": Fall time in ms,
-                        "bounce_count": Number of bounces,
-                        "bounce_duration": Total bounce duration in ms,
-                        "waveform_file": Path to CSV file with waveform data
-                    }
-                }
-
-            - Failure (CONNECTION_FAILED):
-                "Failed to connect to Tasmota device on {port}"
-
-            - Failure (OSCILLOSCOPE_CONNECTION_FAILED):
-                "Failed to connect to oscilloscope at {oscilloscope_ip}"
-
-            - Failure (RELAY_CONTROL_FAILED):
-                "Failed to control relay {relay_number}"
-
-            - Failure (WAVEFORM_CAPTURE_FAILED):
-                "Failed to capture waveform for {transition_type} edge"
+        TestResult: Test result with measurement data
     """
-    context = gcc()
-
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Auto-detect Tasmota device if port not specified
-    if not port:
-        detect_result = detect_tasmota_serial_port(category, "Auto-detect port")
-        if detect_result.failure_code != FailureCodes.NO_FAILURE:
-            return detect_result
-        port = detect_result.return_value["port"]
-
-    context.logger.info(f"Testing relay {relay_number} response profile...")
-
-    # Connect to the Tasmota device
-    tasmota = TasmotaSerialDriver(port)
-    if not tasmota.connect():
-        return TestResult(
-            f"Failed to connect to Tasmota device on {port}",
-            FailureCodes.CONNECTION_FAILED,
-        )
-
-    # Use provided oscilloscope instance or create a new one
-    oscilloscope = None
-    should_disconnect_oscilloscope = False
-
-    if oscilloscope_instance:
-        oscilloscope = oscilloscope_instance
-    elif oscilloscope_ip:
-        # Connect to the oscilloscope if not provided
-        context.logger.info(f"Connecting to oscilloscope at {oscilloscope_ip}...")
-        oscilloscope = RigolOscilloscopeDriver(oscilloscope_ip, oscilloscope_port)
-        if not oscilloscope.connect():
-            tasmota.disconnect()
-            return TestResult(
-                f"Failed to connect to oscilloscope at {oscilloscope_ip}",
-                FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
-            )
-
-        # Setup the oscilloscope for relay testing
-        context.logger.info("Setting up oscilloscope for relay testing...")
-        if not oscilloscope.setup_for_relay_test(channel=1, timebase=timebase):
-            oscilloscope.disconnect()
-            tasmota.disconnect()
-            return TestResult(
-                "Failed to setup oscilloscope",
-                FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
-            )
-
-        should_disconnect_oscilloscope = True
-    else:
-        tasmota.disconnect()
-        return TestResult(
-            "No oscilloscope provided or specified",
-            FailureCodes.OSCILLOSCOPE_CONNECTION_FAILED,
-        )
-
+    logger = gcc().logger
+    logger.info(f"Starting {test_name}")
+    
     try:
-        # Get initial state of the relay
-        initial_state = tasmota.get_power_state(relay_number)
-        if initial_state is None:
+        # Get oscilloscope from context
+        context = gcc()
+        oscilloscope = context.document.get("_oscilloscope")
+        if not oscilloscope or should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
             return TestResult(
-                f"Failed to get initial state of relay {relay_number}",
-                FailureCodes.RELAY_CONTROL_FAILED,
+                "No oscilloscope available - run connect_oscilloscope first",
+                FailureCodes.OSCILLOSCOPE_ERROR
             )
-
-        context.logger.info(f"Initial relay state: {'ON' if initial_state else 'OFF'}")
-
-        # Test results
-        results = {
-            "rising_edge": {},
-            "falling_edge": {},
-        }
-
-        # Test rising edge (OFF->ON)
-        context.logger.info("Testing rising edge (OFF->ON)...")
-
-        # First, ensure the relay is OFF
-        if initial_state:
-            context.logger.info("Turning relay OFF to prepare for rising edge test")
-            if not tasmota.set_power(False, relay_number):
-                return TestResult(
-                    f"Failed to turn relay {relay_number} OFF",
-                    FailureCodes.RELAY_CONTROL_FAILED,
-                )
-            time.sleep(1)  # Wait for relay to stabilize
-
-        # Setup oscilloscope for rising edge
-        context.logger.info("Setting up oscilloscope for rising edge trigger")
-        oscilloscope.send_command(":TRIG:EDGE:SLOP POS")
-        oscilloscope.send_command(":TRIG:EDGE:LEV 2.5")
-        oscilloscope.send_command(":SING")  # Single trigger mode
-        time.sleep(0.5)  # Wait for oscilloscope to be ready
-
-        # Turn relay ON and capture the rising edge
-        context.logger.info(f"Turning relay {relay_number} ON")
-        if not tasmota.set_power(True, relay_number):
+        
+        # Get cell config for range checks
+        cellConfig = context.document.get("_cell_config_obj", {})
+        
+        # Set default ranges if not in config
+        if not "ac_frequency_range" in cellConfig:
+            cellConfig["ac_frequency_range"] = {"min": 55.0, "max": 65.0}  # 60Hz ±5Hz
+        if not "ac_voltage_range" in cellConfig:
+            cellConfig["ac_voltage_range"] = {"min": 100.0, "max": 130.0}  # 120V ±10%
+        
+        # Connect to Tasmota device first
+        logger.info("Connecting to Tasmota device...")
+        tasmota = TasmotaSerialDriver(serial_port)
+        if not tasmota.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
             return TestResult(
-                f"Failed to turn relay {relay_number} ON",
-                FailureCodes.RELAY_CONTROL_FAILED,
+                f"Failed to connect to Tasmota device on {serial_port}",
+                FailureCodes.CONNECTION_ERROR
             )
-
-        # Wait for trigger and capture waveform
-        context.logger.info("Waiting for rising edge trigger...")
-        triggered = False
-        start_time = time.time()
-        while (time.time() - start_time) < 5:  # 5 second timeout
-            status = oscilloscope.query(":TRIG:STAT?")
-            if status and "STOP" in status:
-                triggered = True
-                break
-            time.sleep(0.1)
-
-        if not triggered:
-            context.logger.warning("Rising edge trigger timeout")
-            results["rising_edge"]["error"] = "Trigger timeout"
-        else:
-            # Capture and save waveform
-            context.logger.info("Capturing rising edge waveform")
-            waveform = oscilloscope.capture_waveform(channel=1)
-            if waveform is not None:
-                rising_file = os.path.join(output_dir, "relay_rising.csv")
-                if oscilloscope.save_waveform_to_csv(waveform, rising_file):
-                    context.logger.info(f"Saved rising edge waveform to {rising_file}")
-
-                    # Analyze the waveform
-                    analysis = oscilloscope.analyze_relay_transition(rising_file)
-                    results["rising_edge"] = analysis
-                    results["rising_edge"]["waveform_file"] = rising_file
-
-                    context.logger.info(f"Rising edge analysis: {analysis}")
-                else:
-                    context.logger.error("Failed to save rising edge waveform")
-                    results["rising_edge"]["error"] = "Failed to save waveform"
-            else:
-                context.logger.error("Failed to capture rising edge waveform")
-                results["rising_edge"]["error"] = "Failed to capture waveform"
-
-        # Wait for relay to stabilize
-        time.sleep(1)
-
-        # Test falling edge (ON->OFF)
-        context.logger.info(
-            "Testing falling edge (ON->OFF)...", "info", BannerState.SHOWING
-        )
-
-        # Setup oscilloscope for falling edge
-        context.logger.info("Setting up oscilloscope for falling edge trigger")
-        oscilloscope.send_command(":TRIG:EDGE:SLOP NEG")
-        oscilloscope.send_command(":TRIG:EDGE:LEV 2.5")
-        oscilloscope.send_command(":SING")  # Single trigger mode
-        time.sleep(0.5)  # Wait for oscilloscope to be ready
-
-        # Turn relay OFF and capture the falling edge
-        context.logger.info(f"Turning relay {relay_number} OFF")
-        if not tasmota.set_power(False, relay_number):
-            return TestResult(
-                f"Failed to turn relay {relay_number} OFF",
-                FailureCodes.RELAY_CONTROL_FAILED,
-            )
-
-        # Wait for trigger and capture waveform
-        context.logger.info("Waiting for falling edge trigger...")
-        triggered = False
-        start_time = time.time()
-        while (time.time() - start_time) < 5:  # 5 second timeout
-            status = oscilloscope.query(":TRIG:STAT?")
-            if status and "STOP" in status:
-                triggered = True
-                break
-            time.sleep(0.1)
-
-        if not triggered:
-            context.logger.warning("Falling edge trigger timeout")
-            results["falling_edge"]["error"] = "Trigger timeout"
-        else:
-            # Capture and save waveform
-            context.logger.info("Capturing falling edge waveform")
-            waveform = oscilloscope.capture_waveform(channel=1)
-            if waveform is not None:
-                falling_file = os.path.join(output_dir, "relay_falling.csv")
-                if oscilloscope.save_waveform_to_csv(waveform, falling_file):
-                    context.logger.info(
-                        f"Saved falling edge waveform to {falling_file}"
-                    )
-
-                    # Analyze the waveform
-                    analysis = oscilloscope.analyze_relay_transition(falling_file)
-                    results["falling_edge"] = analysis
-                    results["falling_edge"]["waveform_file"] = falling_file
-
-                    context.logger.info(f"Falling edge analysis: {analysis}")
-                else:
-                    context.logger.error("Failed to save falling edge waveform")
-                    results["falling_edge"]["error"] = "Failed to save waveform"
-            else:
-                context.logger.error("Failed to capture falling edge waveform")
-                results["falling_edge"]["error"] = "Failed to capture waveform"
-
-        # Restore initial state
-        context.logger.info(
-            f"Restoring relay to initial state: {'ON' if initial_state else 'OFF'}"
-        )
-        tasmota.set_power(initial_state, relay_number)
-
-        # Check if we captured at least one waveform successfully
-        if "error" in results["rising_edge"] and "error" in results["falling_edge"]:
-            context.set_banner(
-                "Failed to capture any waveforms", "error", BannerState.SHOWING
-            )
-            return TestResult(
-                "Failed to capture any waveforms",
-                FailureCodes.WAVEFORM_CAPTURE_FAILED,
-                return_value=results,
-            )
-
-        # Save analysis results to CSV for Onnyx to upload
+            
         try:
-            import csv
-
-            # Create a summary CSV file with static name
-            summary_file = os.path.join(output_dir, "relay_response_summary.csv")
-
-            with open(summary_file, "w", newline="") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["Parameter", "Rising Edge", "Falling Edge"])
-                writer.writerow(
-                    [
-                        "Test Time",
-                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    ]
+            # Turn relay ON to verify AC signal
+            logger.info(f"Turning relay {relay_number} ON to verify AC signal")
+            if not tasmota.set_power(True, relay_number) or should_simulate_failure(FailureCodes.RELAY_ERROR.value):
+                return TestResult(
+                    f"Failed to turn on relay {relay_number}",
+                    FailureCodes.RELAY_ERROR
                 )
-                writer.writerow(["Relay Number", relay_number, relay_number])
-
-                # Add transition metrics
-                rising_time = results["rising_edge"].get("transition_time_ms", "N/A")
-                falling_time = results["falling_edge"].get("transition_time_ms", "N/A")
-                writer.writerow(["Transition Time (ms)", rising_time, falling_time])
-
-                rising_bounce = results["rising_edge"].get("bounce_count", "N/A")
-                falling_bounce = results["falling_edge"].get("bounce_count", "N/A")
-                writer.writerow(["Bounce Count", rising_bounce, falling_bounce])
-
-                rising_bounce_duration = results["rising_edge"].get(
-                    "bounce_duration_ms", "N/A"
+            time.sleep(1)  # Let relay settle
+            
+            # Try to find AC signal with auto-scale
+            logger.info("Auto-scaling to find AC signal...")
+            oscilloscope.send_command(":AUToscale")
+            time.sleep(5)  # Give auto-scale time to work
+            
+            # Restore our vertical scale
+            oscilloscope.send_command(":CHANnel1:SCALe 50")
+            time.sleep(0.1)
+            
+            # Force trigger and wait for stable signal
+            oscilloscope.send_command(":TFORce")
+            time.sleep(3)
+            
+            # Get measurements with retries
+            max_retries = 3
+            freq_values = []
+            vrms_values = []
+            vpp_values = []
+            
+            for attempt in range(max_retries):
+                # Get measurements
+                freq = oscilloscope.query(":MEASure:ITEM? FREQuency,CHANnel1")
+                time.sleep(0.2)  # Longer delay between measurements
+                vpp = oscilloscope.query(":MEASure:ITEM? VPP,CHANnel1")
+                time.sleep(0.2)
+                vrms = oscilloscope.query(":MEASure:ITEM? VRMS,CHANnel1")
+                time.sleep(0.2)
+                
+                try:
+                    freq_val = float(freq)
+                    vpp_val = float(vpp)
+                    vrms_val = float(vrms)
+                    
+                    # Check if values are valid (not 9.9e37)
+                    if freq_val >= 9.9e37: freq_val = 0
+                    if vpp_val >= 9.9e37: vpp_val = 0
+                    if vrms_val >= 9.9e37: vrms_val = 0
+                    
+                    # Check if we have valid measurements
+                    if freq_val > 0 and vrms_val > 0:
+                        freq_values.append(freq_val)
+                        vrms_values.append(vrms_val)
+                        vpp_values.append(vpp_val)
+                        logger.info(f"Attempt {attempt + 1}: Found signal - {freq_val:.1f} Hz, {vrms_val:.1f} Vrms")
+                        if len(freq_values) >= 3:  # Get at least 3 good measurements
+                            break
+                    else:
+                        logger.warning(f"Attempt {attempt + 1}: No valid measurements")
+                        if attempt < max_retries - 1:
+                            # Try forcing trigger again
+                            oscilloscope.send_command(":TFORce")
+                            time.sleep(3)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Attempt {attempt + 1}: Error reading measurements - {str(e)}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+            
+            # Check if we got any valid measurements
+            if not freq_values or not vrms_values or should_simulate_failure(FailureCodes.MEASUREMENT_ERROR.value):
+                return TestResult(
+                    "Failed to get valid measurements",
+                    FailureCodes.MEASUREMENT_ERROR
                 )
-                falling_bounce_duration = results["falling_edge"].get(
-                    "bounce_duration_ms", "N/A"
+            
+            # Use range_check_list for frequency and voltage measurements
+            # Check AC frequency
+            rc = range_check_list(freq_values, "ac_frequency_range", cellConfig, prefix="ac_line")
+            if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+                measurements = {
+                    'frequency_hz': freq_values,
+                    'vpp_volts': vpp_values,
+                    'vrms_volts': vrms_values
+                }
+                context.record_values(measurements)
+                save_measurements_to_csv(measurements, "relay_measurements.csv")
+                return TestResult(
+                    f"AC frequency out of range: {rc.message}",
+                    FailureCodes.MEASUREMENT_ERROR,
+                    return_value=measurements
                 )
-                writer.writerow(
-                    [
-                        "Bounce Duration (ms)",
-                        rising_bounce_duration,
-                        falling_bounce_duration,
-                    ]
+                
+            # Check AC voltage
+            rc = range_check_list(vrms_values, "ac_voltage_range", cellConfig, prefix="ac_line")
+            if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+                measurements = {
+                    'frequency_hz': freq_values,
+                    'vpp_volts': vpp_values,
+                    'vrms_volts': vrms_values
+                }
+                context.record_values(measurements)
+                save_measurements_to_csv(measurements, "relay_measurements.csv")
+                return TestResult(
+                    f"AC voltage out of range: {rc.message}",
+                    FailureCodes.MEASUREMENT_ERROR,
+                    return_value=measurements
                 )
-
-                rising_start_voltage = results["rising_edge"].get(
-                    "start_voltage", "N/A"
+                
+            # Measuring power quality metrics
+            logger.info("Measuring power quality metrics...")
+            
+            # Clear existing measurements
+            oscilloscope.send_command(":MEASure:CLEar ALL")
+            time.sleep(0.2)
+            
+            # Set up period and width measurements
+            oscilloscope.send_command(":MEASure:ITEM PERIOD,CHANnel1")  # Period
+            time.sleep(0.2)
+            oscilloscope.send_command(":MEASure:ITEM PWIDTH,CHANnel1")  # Positive pulse width
+            time.sleep(0.2)
+            oscilloscope.send_command(":MEASure:ITEM NWIDTH,CHANnel1")  # Negative pulse width
+            time.sleep(0.2)
+            
+            # Force trigger and wait for stable measurements
+            oscilloscope.send_command(":TFORce")
+            time.sleep(2)
+            
+            # Get measurements
+            period_response = oscilloscope.query(":MEASure:ITEM? PERIOD,CHANnel1").strip()
+            time.sleep(0.2)
+            pwidth_response = oscilloscope.query(":MEASure:ITEM? PWIDTH,CHANnel1").strip()
+            time.sleep(0.2)
+            nwidth_response = oscilloscope.query(":MEASure:ITEM? NWIDTH,CHANnel1").strip()
+            time.sleep(0.2)
+            
+            # Check for invalid measurements
+            if (not period_response or not pwidth_response or not nwidth_response or 
+                should_simulate_failure(FailureCodes.MEASUREMENT_ERROR.value)):
+                measurements = {
+                    'frequency_hz': freq_values,
+                    'vpp_volts': vpp_values,
+                    'vrms_volts': vrms_values,
+                    'error': 'Failed to get timing measurements'
+                }
+                context.record_values(measurements)
+                return TestResult(
+                    "Failed to get timing measurements",
+                    FailureCodes.MEASUREMENT_ERROR,
+                    return_value=measurements
                 )
-                falling_start_voltage = results["falling_edge"].get(
-                    "start_voltage", "N/A"
+            
+            try:
+                period = float(period_response)
+                pos_width = float(pwidth_response)
+                neg_width = float(nwidth_response)
+                
+                # Check for invalid values (9.9e37)
+                if period >= 9.9e37 or pos_width >= 9.9e37 or neg_width >= 9.9e37:
+                    measurements = {
+                        'frequency_hz': freq_values,
+                        'vpp_volts': vpp_values,
+                        'vrms_volts': vrms_values,
+                        'period': period,
+                        'pos_width': pos_width,
+                        'neg_width': neg_width,
+                        'error': 'Invalid timing measurements'
+                    }
+                    context.record_values(measurements)
+                    return TestResult(
+                        "Invalid timing measurements received",
+                        FailureCodes.MEASUREMENT_ERROR,
+                        return_value=measurements
+                    )
+                
+                # Calculate duty cycle from positive and negative widths
+                total_time = pos_width + neg_width
+                duty_cycle = (pos_width / total_time) * 100 if total_time > 0 else 0
+                
+                # Calculate voltage stability
+                voltage_stability = {
+                    'mean': np.mean(vrms_values),
+                    'std_dev': np.std(vrms_values),
+                    'min': np.min(vrms_values),
+                    'max': np.max(vrms_values),
+                    'variation_coefficient': np.std(vrms_values) / np.mean(vrms_values) * 100
+                }
+                
+                # Set default ranges if not in config
+                if not "duty_cycle_range" in cellConfig:
+                    cellConfig["duty_cycle_range"] = {"min": 45.0, "max": 55.0}  # 50% ±5% for AC sine wave
+                if not "voltage_stability_range" in cellConfig:
+                    cellConfig["voltage_stability_range"] = {"min": 0.0, "max": 2.0}  # Max 2% variation
+                
+                # Record all measurements
+                measurements = {
+                    'frequency_hz': freq_values,
+                    'vpp_volts': vpp_values,
+                    'vrms_volts': vrms_values,
+                    'duty_cycle': duty_cycle,
+                    'period': period,
+                    'pos_width': pos_width,
+                    'neg_width': neg_width,
+                    'voltage_stability': voltage_stability
+                }
+                context.record_values(measurements)
+                
+                # Check duty cycle
+                rc = range_check(duty_cycle, "duty_cycle_range", cellConfig, prefix="power_quality")
+                if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+                    return TestResult(
+                        f"Duty cycle out of range: {duty_cycle}%",
+                        FailureCodes.MEASUREMENT_ERROR,
+                        return_value=measurements
+                    )
+                
+                # Check voltage stability
+                rc = range_check(voltage_stability['variation_coefficient'], 
+                               "voltage_stability_range", 
+                               cellConfig, 
+                               prefix="power_quality")
+                if rc.failure_code != BaseFailureCodes.NO_FAILURE:
+                    return TestResult(
+                        f"Voltage stability out of range: {voltage_stability['variation_coefficient']}% variation",
+                        FailureCodes.MEASUREMENT_ERROR,
+                        return_value=measurements
+                    )
+                
+                logger.info(f"Verified AC signal - Frequency: {sum(freq_values)/len(freq_values):.1f} Hz, "
+                          f"Voltage: {sum(vrms_values)/len(vrms_values):.1f} Vrms")
+                logger.info(f"Power Quality - Duty Cycle: {duty_cycle:.1f}%, Period: {period:.2e}s, "
+                          f"Voltage Variation: {voltage_stability['variation_coefficient']:.2f}%")
+                
+                # Turn relay off to prepare for turn-on capture
+                if not tasmota.set_power(False, relay_number) or should_simulate_failure(FailureCodes.RELAY_ERROR.value):
+                    return TestResult(
+                        f"Failed to turn off relay {relay_number}",
+                        FailureCodes.RELAY_ERROR,
+                        return_value=measurements
+                    )
+                time.sleep(1)  # Let relay settle
+                
+                # Capture turn-on transition
+                turn_on_waveform = capture_relay_transition(
+                    oscilloscope, tasmota, relay_number, True, logger
                 )
-                writer.writerow(
-                    ["Start Voltage (V)", rising_start_voltage, falling_start_voltage]
+                if turn_on_waveform is None:
+                    # If we got a timeout waiting for trigger, it's likely a relay actuation failure
+                    return TestResult(
+                        "Failed to capture relay turn-on transition - relay may have failed to actuate",
+                        FailureCodes.RELAY_ERROR,
+                        return_value=measurements
+                    )
+                
+                # Save turn-on waveform data
+                context.record_values({'turn_on_waveform': turn_on_waveform})
+                
+                # Save waveform to CSV for analysis
+                np.savetxt('relay_turn_on.csv', turn_on_waveform, delimiter=',', 
+                         header='time_s,voltage_v', comments='')
+                logger.info("Saved relay turn-on waveform to CSV")
+                
+                # Return measurements
+                return TestResult(
+                    "Successfully captured relay turn-on transition",
+                    FailureCodes.NO_FAILURE,
+                    return_value=measurements
                 )
-
-                rising_end_voltage = results["rising_edge"].get("end_voltage", "N/A")
-                falling_end_voltage = results["falling_edge"].get("end_voltage", "N/A")
-                writer.writerow(
-                    ["End Voltage (V)", rising_end_voltage, falling_end_voltage]
+                
+            except Exception as e:
+                measurements = {
+                    'frequency_hz': freq_values,
+                    'vpp_volts': vpp_values,
+                    'vrms_volts': vrms_values,
+                    'error': str(e)
+                }
+                context.record_values(measurements)
+                logger.error(f"Error processing measurements: {str(e)}")
+                return TestResult(
+                    f"Error processing measurements: {str(e)}",
+                    FailureCodes.MEASUREMENT_ERROR,
+                    return_value=measurements
                 )
-
-                # Add waveform file paths
-                rising_file = results["rising_edge"].get("waveform_file", "N/A")
-                falling_file = results["falling_edge"].get("waveform_file", "N/A")
-                writer.writerow(["Waveform File", rising_file, falling_file])
-
-                # Add any errors
-                rising_error = results["rising_edge"].get("error", "None")
-                falling_error = results["falling_edge"].get("error", "None")
-                writer.writerow(["Error", rising_error, falling_error])
-
-            context.logger.info(f"Saved analysis summary to {summary_file}")
-
-            # Add the summary file to the results
-            results["summary_file"] = summary_file
-
-            # Create a detailed CSV with all parameters - static name
-            detailed_file = os.path.join(output_dir, "relay_response_detailed.csv")
-
-            with open(detailed_file, "w", newline="") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["Edge Type", "Parameter", "Value"])
-
-                # Add all parameters from rising edge
-                for key, value in results["rising_edge"].items():
-                    if (
-                        key != "waveform_file"
-                    ):  # Skip the file path to keep the CSV clean
-                        writer.writerow(["Rising", key, value])
-
-                # Add all parameters from falling edge
-                for key, value in results["falling_edge"].items():
-                    if (
-                        key != "waveform_file"
-                    ):  # Skip the file path to keep the CSV clean
-                        writer.writerow(["Falling", key, value])
-
-            context.logger.info(f"Saved detailed analysis to {detailed_file}")
-            results["detailed_file"] = detailed_file
-
-        except Exception as e:
-            context.logger.error(f"Error saving analysis to CSV: {str(e)}")
-            results["csv_error"] = str(e)
-
-        # Test completed successfully
-        context.set_banner(
-            "Relay response profile test completed", "success", BannerState.SHOWING
-        )
-
-        return TestResult(
-            "Relay response profile test completed successfully",
-            FailureCodes.NO_FAILURE,
-            return_value=results,
-        )
-
+            
+        finally:
+            tasmota.disconnect()
+        
     except Exception as e:
-        context.logger.error(f"Exception during relay response profile test: {str(e)}")
-        import traceback
-
-        context.logger.error(traceback.format_exc())
+        logger.error(f"Error testing relay response: {str(e)}")
         return TestResult(
-            f"Exception during relay response profile test: {str(e)}",
-            FailureCodes.EXCEPTION,
-            return_value={"error": str(e)},
-        )
-    finally:
-        # Always disconnect from devices
-        tasmota.disconnect()
-        if should_disconnect_oscilloscope:
-            oscilloscope.disconnect()
+            f"Failed to test relay response: {str(e)}",
+            FailureCodes.MEASUREMENT_ERROR
+        ) 

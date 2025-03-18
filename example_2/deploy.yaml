@@ -1,0 +1,19 @@
+server:
+  url: ""
+  api_key: ""
+
+test_global:
+  python_version: "3.11.7"
+  base_path: "./"
+  deploy:
+    - files:
+        - "requirements.txt"
+
+tests:
+  - name: "widget_ist"
+    entry_point: "example_flow.py:example_flow"
+    deploy:
+      - files:
+          - "example_flow.py"
+      - folders:
+          - "tests"
