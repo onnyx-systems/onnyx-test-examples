@@ -1,0 +1,14 @@
+server:
+  url: ""
+  api_key: ""
+widget_ist:
+  python_version: 3.11.7
+  base_path: example_1
+  entry_point: example_flow.py:example_flow
+  # Uncomment the line below to use an explicit version instead of git hash
+  # version: custom-v1
+  deploy:
+    - requirements.txt
+    - README.md
+    - tests/example_tests.py
+    - example_flow.py

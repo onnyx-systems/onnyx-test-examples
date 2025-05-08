@@ -12,6 +12,8 @@ __pycache__
 
 *.log
 temp_*
+*/dev_mode
+
 
 # go
 *.exe

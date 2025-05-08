@@ -4,7 +4,7 @@ import time
 from onnyx.failure import FailureCode, BaseFailureCodes
 from onnyx.results import TestResult
 from onnyx.decorators import test
-from onnyx.context import gcc
+from onnyx.context import gcc, ButtonResponse
 from onnyx.mqtt import BannerState
 from onnyx.utils import range_check_list, range_check
 import subprocess
@@ -17,7 +17,6 @@ from datetime import datetime
 from typing import List
 import platform
 from shutil import which
-from onnyx.context import ButtonResponse
 
 
 class FailureCodes(FailureCode):
@@ -909,21 +908,6 @@ def check_system_dependencies(category: str = None, test_name: str = None):
             dependencies[dep_name] = {"installed": False, "error": str(e)}
             missing.append(dep_name)
 
-    # Check camera access
-    try:
-        cap = cv2.VideoCapture(0)
-        camera_available = cap.isOpened()
-        cap.release()
-        dependencies["camera"] = {
-            "installed": camera_available,
-            "version": "Available" if camera_available else "Not available",
-        }
-        if not camera_available:
-            missing.append("camera")
-    except Exception as e:
-        dependencies["camera"] = {"installed": False, "error": str(e)}
-        missing.append("camera")
-
     if missing:
         return TestResult(
             f"Missing required dependencies: {', '.join(missing)}",
@@ -953,12 +937,6 @@ def interactive_test(
         message (str, optional): Message to show to user. Defaults to "Select an option"
     """
     context = gcc()
-
-    # Use default values if not provided
-    if buttons is None:
-        buttons = ["A", "B", "Abort"]
-    if message is None:
-        message = "Select an option"
 
     # Show some buttons and wait for response
     response = context.wait_for_input(
