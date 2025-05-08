@@ -52,9 +52,7 @@ def example_flow(test_document, settings):
             )
             ctx.logger.info(rc.__dict__)
             if rc.failure_code != FailureCodes.NO_FAILURE:
-                ctx.logger.info(
-                    "Test failed with failure code: %s", rc.failure_code
-                )
+                ctx.logger.info("Test failed with failure code: %s", rc.failure_code)
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)

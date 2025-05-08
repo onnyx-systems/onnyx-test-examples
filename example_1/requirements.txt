@@ -22,4 +22,4 @@ PyYAML==6.0.2
 requests==2.32.3
 typing_extensions==4.12.2
 urllib3==2.2.3
-onnyx @ https://storage.googleapis.com/onnyx-systems/packages/onnyx/onnyx-0.0.16-py3-none-any.whl
+onnyx @ https://storage.googleapis.com/onnyx-systems/packages/onnyx/onnyx-0.0.22-py3-none-any.whl

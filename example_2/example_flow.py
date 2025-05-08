@@ -6,8 +6,9 @@ from tests.tasmota_tests import (
     check_firmware_version,
     connect_oscilloscope,
     test_relay_response,
-    detect_oscilloscope
+    detect_oscilloscope,
 )
+
 
 def example_flow(test_document, settings):
     """
@@ -19,7 +20,7 @@ def example_flow(test_document, settings):
     3. Connecting to an oscilloscope
     4. Measuring relay response characteristics
     5. Capturing and analyzing AC waveforms
-    
+
     Args:
         test_document: Test document with configuration
         settings: Test settings (e.g., "DEV", "PROD")
@@ -48,7 +49,9 @@ def example_flow(test_document, settings):
         min_firmware_version = cellConfig.get("min_firmware_version", None)
         oscilloscope_ip = cellSettings.get("oscilloscope_ip", None)
         oscilloscope_port = cellConfig.get("oscilloscope_port", 5555)
-        oscilloscope_timebase = cellConfig.get("oscilloscope_timebase", 0.005)  # 5ms/div for 60Hz AC (3 cycles per screen)
+        oscilloscope_timebase = cellConfig.get(
+            "oscilloscope_timebase", 0.005
+        )  # 5ms/div for 60Hz AC (3 cycles per screen)
         relay_number = cellConfig.get("relay_number", 1)
 
         # STEP 1: Detect and connect to Tasmota device
@@ -57,7 +60,7 @@ def example_flow(test_document, settings):
             "Tasmota",  # category
             "Detect and connect to device",  # test_name
             serial_port,  # port
-            baudrate  # baudrate
+            baudrate,  # baudrate
         )
 
         if rc.failure_code != FailureCodes.NO_FAILURE:
@@ -68,7 +71,9 @@ def example_flow(test_document, settings):
         else:
             ctx.record_values(rc.return_value)
             serial_port = rc.return_value["port"]
-            ctx.logger.info(f"Successfully connected to Tasmota device on {serial_port}")
+            ctx.logger.info(
+                f"Successfully connected to Tasmota device on {serial_port}"
+            )
 
         # STEP 2: Check firmware version if required
         if min_firmware_version:
@@ -77,7 +82,7 @@ def example_flow(test_document, settings):
                 "Tasmota",  # category
                 "Check firmware version",  # test_name
                 serial_port,
-                min_firmware_version
+                min_firmware_version,
             )
 
             if rc.failure_code != FailureCodes.NO_FAILURE:
@@ -88,27 +93,29 @@ def example_flow(test_document, settings):
             else:
                 ctx.record_values(rc.return_value)
                 firmware_version = rc.return_value["firmware_version"]
-                ctx.logger.info(f"Firmware version {firmware_version} meets requirements")
+                ctx.logger.info(
+                    f"Firmware version {firmware_version} meets requirements"
+                )
 
         # STEP 3: Connect to oscilloscope
         oscilloscope_instance = None
         ctx.logger.info("STEP 3: Connecting to oscilloscope")
-        
+
         # Check if oscilloscope IP is provided
         if not oscilloscope_ip:
             ctx.logger.error("No oscilloscope IP address provided")
             failure_code = FailureCodes.OSCILLOSCOPE_ERROR
             ctx.wrap_up(failure_code)
             return
-            
+
         # Check if oscilloscope is available
         rc = detect_oscilloscope(
             "Oscilloscope",  # category
             "Check availability",  # test_name
             oscilloscope_ip,
-            oscilloscope_port
+            oscilloscope_port,
         )
-        
+
         if rc.failure_code != FailureCodes.NO_FAILURE:
             ctx.logger.error(f"Oscilloscope check failed: {rc.message}")
             failure_code = rc.failure_code
@@ -116,17 +123,19 @@ def example_flow(test_document, settings):
             return
         else:
             ctx.record_values(rc.return_value)
-            ctx.logger.info(f"Found oscilloscope: {rc.return_value['oscilloscope_idn']}")
-        
+            ctx.logger.info(
+                f"Found oscilloscope: {rc.return_value['oscilloscope_idn']}"
+            )
+
         # Connect and configure oscilloscope
         rc = connect_oscilloscope(
             "Oscilloscope",  # category
             "Connect and configure",  # test_name
             oscilloscope_ip,
             oscilloscope_port,
-            oscilloscope_timebase
+            oscilloscope_timebase,
         )
-        
+
         if rc.failure_code != FailureCodes.NO_FAILURE:
             ctx.logger.error(f"Oscilloscope connection failed: {rc.message}")
             failure_code = rc.failure_code
@@ -134,17 +143,16 @@ def example_flow(test_document, settings):
             return
         else:
             ctx.record_values(rc.return_value)
-            ctx.logger.info(f"Successfully connected to oscilloscope at {oscilloscope_ip}")
+            ctx.logger.info(
+                f"Successfully connected to oscilloscope at {oscilloscope_ip}"
+            )
 
         # STEP 4: Test relay response with oscilloscope
         ctx.logger.info("STEP 4: Testing relay response")
         rc = test_relay_response(
-            "Relay",  # category
-            "Test response",  # test_name
-            serial_port,
-            relay_number
+            "Relay", "Test response", serial_port, relay_number  # category  # test_name
         )
-        
+
         if rc.failure_code != FailureCodes.NO_FAILURE:
             ctx.logger.error(f"Relay test failed: {rc.message}")
             failure_code = rc.failure_code
@@ -154,7 +162,7 @@ def example_flow(test_document, settings):
         else:
             ctx.record_values({"measurements": rc.return_value})
             ctx.logger.info("Relay test passed")
-            
+
         # Disconnect from oscilloscope if connected
         if oscilloscope_instance:
             try:
@@ -162,7 +170,7 @@ def example_flow(test_document, settings):
                 ctx.logger.info("Disconnected from oscilloscope")
             except Exception as e:
                 ctx.logger.warning(f"Error disconnecting from oscilloscope: {str(e)}")
-        
+
         # Wrap up the test
         ctx.wrap_up(failure_code)
 
