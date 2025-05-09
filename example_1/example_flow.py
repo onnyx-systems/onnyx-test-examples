@@ -35,13 +35,13 @@ def example_flow(test_document, settings):
 
             failure_code = FailureCodes.NO_FAILURE
 
-            if failure_code == FailureCodes.NO_FAILURE:
-                rc = check_system_dependencies("Init", "Check system dependencies")
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    ctx.logger.error("Missing required dependencies")
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            # if failure_code == FailureCodes.NO_FAILURE:
+            #     rc = check_system_dependencies("Init", "Check system dependencies")
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         ctx.logger.error("Missing required dependencies")
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
             if failure_code == FailureCodes.NO_FAILURE:
                 rc = check_internet_connection(
@@ -63,102 +63,103 @@ def example_flow(test_document, settings):
             # clear the banner
             ctx.set_banner("", "info", BannerState.HIDDEN)
 
-            if failure_code == FailureCodes.NO_FAILURE:
-                # Get default drive based on platform
-                default_drive = "C" if platform.system() == "Windows" else "/"
-                drive_setting = cellConfig.get("drive_letter")
 
-                # If a drive letter is specified in config, respect the platform
-                if drive_setting and platform.system() != "Windows":
-                    # Convert Windows drive letter to Linux root
-                    drive_setting = "/"
+            # if failure_code == FailureCodes.NO_FAILURE:
+            #     # Get default drive based on platform
+            #     default_drive = "C" if platform.system() == "Windows" else "/"
+            #     drive_setting = cellConfig.get("drive_letter")
 
-                rc = is_drive_present(
-                    "Init",
-                    "Check if drive is present",
-                    drive_setting or default_drive,
-                )
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                ctx.record_values(rc.return_value)
+            #     # If a drive letter is specified in config, respect the platform
+            #     if drive_setting and platform.system() != "Windows":
+            #         # Convert Windows drive letter to Linux root
+            #         drive_setting = "/"
 
-            if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
-                "enable_interactive_test", True
-            ):
-                # First interactive test - Yes/No question
-                rc = interactive_test(
-                    "Interactive Test 1",
-                    "First example of prompting",
-                    buttons=["Yes", "No", "Abort"],
-                    message="Is the device powered on?",
-                )
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            #     rc = is_drive_present(
+            #         "Init",
+            #         "Check if drive is present",
+            #         drive_setting or default_drive,
+            #     )
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     ctx.record_values(rc.return_value)
 
-                # Second interactive test - Color selection
-                if failure_code == FailureCodes.NO_FAILURE:
-                    rc = interactive_test(
-                        "Interactive Test 2",
-                        "Second example of prompting",
-                        buttons=["Red", "Green", "Blue", "Abort"],
-                        message="Select the color displayed on the device screen",
-                    )
-                    if rc.failure_code != FailureCodes.NO_FAILURE:
-                        failure_code = rc.failure_code
-                    else:
-                        ctx.record_values(rc.return_value)
+            # if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
+            #     "enable_interactive_test", True
+            # ):
+            #     # First interactive test - Yes/No question
+            #     rc = interactive_test(
+            #         "Interactive Test 1",
+            #         "First example of prompting",
+            #         buttons=["Yes", "No", "Abort"],
+            #         message="Is the device powered on?",
+            #     )
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
-            if failure_code == FailureCodes.NO_FAILURE:
-                min_mbps = cellConfig.get("min_write_speed_mbps", 10)
-                num_test_files = cellConfig.get("num_test_files", 5)
-                rc = disk_test("Storage Test", "Save data", min_mbps, num_test_files)
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            #     # Second interactive test - Color selection
+            #     if failure_code == FailureCodes.NO_FAILURE:
+            #         rc = interactive_test(
+            #             "Interactive Test 2",
+            #             "Second example of prompting",
+            #             buttons=["Red", "Green", "Blue", "Abort"],
+            #             message="Select the color displayed on the device screen",
+            #         )
+            #         if rc.failure_code != FailureCodes.NO_FAILURE:
+            #             failure_code = rc.failure_code
+            #         else:
+            #             ctx.record_values(rc.return_value)
 
-            if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
-                "enable_camera_test", True
-            ):
-                rc = take_picture("Camera Test", "Take picture")
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            # if failure_code == FailureCodes.NO_FAILURE:
+            #     min_mbps = cellConfig.get("min_write_speed_mbps", 10)
+            #     num_test_files = cellConfig.get("num_test_files", 5)
+            #     rc = disk_test("Storage Test", "Save data", min_mbps, num_test_files)
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
-            if failure_code == FailureCodes.NO_FAILURE:
-                rc = cpu_stress_test(
-                    "CPU Test",
-                    "Perform CPU stress test",
-                    cellConfig.get("cpu_stress_duration", 5),
-                )
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            # if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
+            #     "enable_camera_test", True
+            # ):
+            #     rc = take_picture("Camera Test", "Take picture")
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
-            # clear the banner
-            ctx.set_banner("", "info", BannerState.HIDDEN)
+            # if failure_code == FailureCodes.NO_FAILURE:
+            #     rc = cpu_stress_test(
+            #         "CPU Test",
+            #         "Perform CPU stress test",
+            #         cellConfig.get("cpu_stress_duration", 5),
+            #     )
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
-            if failure_code == FailureCodes.NO_FAILURE:
-                rc = get_screen_resolution("Display Test", "Get screen resolution")
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            # # clear the banner
+            # ctx.set_banner("", "info", BannerState.HIDDEN)
 
-            if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
-                "battery_test_enable", True
-            ):
-                rc = check_battery_status("Battery Test", "Check battery status")
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
+            # if failure_code == FailureCodes.NO_FAILURE:
+            #     rc = get_screen_resolution("Display Test", "Get screen resolution")
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
 
-            ctx.wrap_up(failure_code)
+            # if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
+            #     "battery_test_enable", True
+            # ):
+            #     rc = check_battery_status("Battery Test", "Check battery status")
+            #     if rc.failure_code != FailureCodes.NO_FAILURE:
+            #         failure_code = rc.failure_code
+            #     else:
+            #         ctx.record_values(rc.return_value)
+
+            # ctx.wrap_up(failure_code)
     except Exception as e:
         print(f"Error in example_flow: {e}")
         import traceback
@@ -175,7 +176,7 @@ if __name__ == "__main__":
             "cpu_stress_duration": 5,
             "cpu_usage_range": {"max": 100, "min": 1},
             "drive_letter": "C",
-            "enable_camera_test": True,
+            "enable_camera_test": False,
             "enable_interactive_test": True,
             "min_write_speed_mbps": 100,
             "num_test_files": 10,

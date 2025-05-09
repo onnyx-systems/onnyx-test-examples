@@ -2,14 +2,14 @@ common:
   requirements: example_1/requirements.txt
   python_version: 3.11.7
 api:
-  server_url: https://dev-gcp.onnyx.systems/
-  api_key:
+  server_url: https://onnyx-demo-3.onnyx.systems
+  api_key: 56dcb34e-103c-49bd-8270-c75576dc8f19
 test_configs:
-  - name: widget_ist
+  - name: example
     path: example_1/example_flow.py
     entry_point: example_flow
     station_name: WIDGET_IST_STATION_1
-    collection_name: widget_ist
-mqtt:
-  broker_url: https://dev-gcp.onnyx.systems/mqtt
-  websocket_port: 9002
+    collection_name: test
+# mqtt:
+#   broker_url: wss://onnyx-demo-3.onnyx.systems/mqtt-ws
+#   websocket_port: 9002

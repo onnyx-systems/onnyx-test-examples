@@ -4,7 +4,7 @@ import time
 from onnyx.failure import FailureCode, BaseFailureCodes
 from onnyx.results import TestResult
 from onnyx.decorators import test
-from onnyx.context import gcc
+from onnyx.context import gcc, ButtonResponse
 from onnyx.mqtt import BannerState
 from onnyx.utils import range_check_list, range_check
 import subprocess
@@ -14,10 +14,9 @@ import ctypes
 import psutil
 import csv
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import platform
 from shutil import which
-from onnyx.context import ButtonResponse
 
 
 class FailureCodes(FailureCode):
@@ -75,6 +74,7 @@ def check_internet_connection(
     context = gcc()  # Get current context
     ping_results = []
     csv_path = "ping_results.csv"
+    # assert False
 
     # Only update banner at start and end of test
     context.set_banner("Starting internet connection test", "info", BannerState.SHOWING)
@@ -960,12 +960,16 @@ def interactive_test(
     if message is None:
         message = "Select an option"
 
+    context.logger.info("Waiting for user input")
+
     # Show some buttons and wait for response
     response = context.wait_for_input(
         buttons=buttons,
         message=message,
         timeout=30.0,
     )
+
+    context.logger.info(f"User input received: {response}")
 
     if response == ButtonResponse.TIMEOUT:
         return TestResult(

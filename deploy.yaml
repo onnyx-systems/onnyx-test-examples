@@ -1,6 +1,6 @@
 server:
-  url: ""
-  api_key: ""
+  url: "https://onnyx-demo-3.onnyx.systems"
+  api_key: "4ded545e-8e97-4870-ac97-8863014cf552"
 
 test_global:
   python_version: "3.11.7"
@@ -10,10 +10,25 @@ test_global:
         - "requirements.txt"
 
 tests:
-  - name: "widget_ist"
+  - name: "test"
     entry_point: "example_flow.py:example_flow"
     deploy:
       - files:
           - "example_flow.py"
       - folders:
           - "tests"
+
+server:
+  url: http://localhost:3001
+  api_key: 0866ed38-63c2-4e41-9e8b-4d8a2221abe8
+widget_ist:
+  python_version: 3.11.7
+  base_path: ../../onnyx-test-examples/example_1
+  entry_point: example_flow.py:example_flow
+  # Uncomment the line below to use an explicit version instead of git hash
+  # version: custom-v1
+  deploy:
+    - requirements.txt
+    - README.md
+    - tests/example_tests.py
+    - example_flow.py

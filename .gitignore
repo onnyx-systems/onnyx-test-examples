@@ -18,3 +18,5 @@ temp_*
 *.dll
 *.so
 *.dylib
+
+*venv*
