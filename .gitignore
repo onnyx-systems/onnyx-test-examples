@@ -20,3 +20,13 @@ temp_*
 *.dll
 *.so
 *.dylib
+
+**venv**
+**dev_mode**
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-onnyx
+bazel-onnyx-test
+bazel-onnyx-test-logs
+bazel-onnyx-test-examples
