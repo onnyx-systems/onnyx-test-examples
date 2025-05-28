@@ -597,7 +597,8 @@ def cpu_stress_test(
         # Check CPU usage range
         cellConfig = context.document.get("_cell_config_obj", {})
         if not "cpu_usage_range" in cellConfig:
-            cellConfig["cpu_usage_range"] = {"min": 10.0, "max": 100.0}  # Default range
+            context.logger.error("cpu_usage_range not found in cellConfig")
+            context.logger.error("Please add a cpu_usage_range to the cellConfig")
 
         rc = range_check_list(
             cpu_percentages, "cpu_usage_range", cellConfig, prefix="cpu_stress"
