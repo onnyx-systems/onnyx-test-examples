@@ -1,15 +1,31 @@
-common:
-  requirements: /home/onnyx/onnyx-test-examples/example_1/requirements.txt
-  python_version: 3.11.7
-api:
-  server_url: "http://192.168.86.34:3001"
-  api_key: "d393b9b9-f872-44d8-bf9a-675b256ae4b6"
-test_configs:
-  - name: widget_ist
-    path: /home/onnyx/onnyx-test-examples/example_1/example_flow.py
-    entry_point: example_flow
-    station_name: WIDGET_IST_STATION_1
-    collection_name: widget_ist
-mqtt:
-  broker_url: "192.168.86.34:1883"
-  websocket_port: 9002
+agent_settings:
+  api:
+    server_url: https://app.onnyx.systems
+    api_key: <api_key>
+  # The below agent settings specify which station to act as, and which test type to 
+  # download and run.
+  agent:
+    # If developer_mode is true, the agent will use the developer settings within each cell
+    # instead of downloading test deployements.
+    developer_mode: true
+    # working_dir is the directory where the test files are downloaded, 
+    # where the venv is created.
+    working_dir: ./
+    station:
+      name: WIDGET_IST_STATION_1
+      cells:
+        # The name should match the 
+        - name: A
+          test_type: widget_ist
+          # Deployment setting is only used if developer_mode is false
+          deployment:
+            test_type_version: 20efe95-v1
+          # Below section is only used if developer_mode is true in the agent settings.
+          developer:
+            # entry_point must have the format path/to/file.py:<main_function_name>
+            entry_point: example_1/example_flow.py:example_flow
+            requirements: example_1/requirements.txt
+            python_version: 3.10.11
+  mongo:
+    station_name: "WIDGET_IST_STATION_1"
+    collection_name: "widget_ist"
