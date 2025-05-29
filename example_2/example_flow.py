@@ -10,7 +10,7 @@ from tests.tasmota_tests import (
 )
 
 
-def example_flow(test_document, settings):
+def example_flow(test_document: dict, settings: str):
     """
     Main test flow for Tasmota relay testing with oscilloscope measurements.
     

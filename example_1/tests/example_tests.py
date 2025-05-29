@@ -121,11 +121,14 @@ def check_internet_connection(
                 writer.writerow(result)
                 ping_results.append(result)
 
-                return TestResult(
-                    "Internet connection failed",
-                    FailureCodes.INTERNET_CONNECTION_FAILED,
-                    return_value={"ping_results": ping_results},
-                )
+    # Save the csv file for uploading to Onnyx
+    context.record_file(csv_path)
+
+    return TestResult(
+        "Internet connection failed",
+        FailureCodes.INTERNET_CONNECTION_FAILED,
+        return_value={"ping_results": ping_results},
+    )
 
     # Calculate average ping time from successful pings
     successful_pings = [
@@ -383,6 +386,9 @@ def disk_test(
                             os.remove(file_path)
                     except Exception as e:
                         context.logger.error(f"Error cleaning up file {file_path}: {e}")
+
+        # Save the csv file for uploading to Onnyx
+        context.record_file(csv_path)
 
         if not write_speeds:
             return TestResult(

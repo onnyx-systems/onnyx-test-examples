@@ -586,6 +586,9 @@ def save_measurements_to_csv(measurements: dict, filename: str):
             writer = csv.DictWriter(csvfile, fieldnames=flat_data.keys())
             writer.writeheader()
             writer.writerow(flat_data)
+
+        # Save the csv file for uploading to Onnyx
+        gcc().record_file(filename)
             
     except Exception as e:
         gcc().logger.error(f"Error saving measurements to CSV: {str(e)}")
@@ -897,6 +900,8 @@ def test_relay_response(
                 # Save waveform to CSV for analysis
                 np.savetxt('relay_turn_on.csv', turn_on_waveform, delimiter=',', 
                          header='time_s,voltage_v', comments='')
+                # Save the csv file for uploading to Onnyx
+                gcc().record_file('relay_turn_on.csv')
                 logger.info("Saved relay turn-on waveform to CSV")
                 
                 # Return measurements
