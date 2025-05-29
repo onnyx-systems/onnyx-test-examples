@@ -15,7 +15,7 @@ from onnyx.mqtt import BannerState
 import platform
 
 
-def example_flow(test_document, settings):
+def example_flow(test_document: dict, settings: str):
     print("Starting example_flow")
     print("Test document:", test_document)
     print("Settings:", settings)
