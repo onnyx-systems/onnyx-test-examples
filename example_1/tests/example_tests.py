@@ -76,7 +76,7 @@ def check_internet_connection(
     csv_path = "ping_results.csv"
 
     # Only update banner at start and end of test
-    context.set_banner("Starting internet connection test", "info", BannerState.SHOWING)
+    context.set_banner("Running internet connection test...", "info", BannerState.SHOWING)
 
     # Create/open CSV file with headers if it doesn't exist
     file_exists = os.path.isfile(csv_path)
@@ -121,14 +121,14 @@ def check_internet_connection(
                 writer.writerow(result)
                 ping_results.append(result)
 
+                return TestResult(
+                    "Internet connection failed",
+                    FailureCodes.INTERNET_CONNECTION_FAILED,
+                    return_value={"ping_results": ping_results},
+                )
+
     # Save the csv file for uploading to Onnyx
     context.record_file(csv_path)
-
-    return TestResult(
-        "Internet connection failed",
-        FailureCodes.INTERNET_CONNECTION_FAILED,
-        return_value={"ping_results": ping_results},
-    )
 
     # Calculate average ping time from successful pings
     successful_pings = [
@@ -284,6 +284,7 @@ def disk_test(
     try:
         context = gcc()
         cellConfig = context.document.get("_cell_config_obj", {})
+        context.set_banner("Running disk test...", "info", BannerState.SHOWING)
 
         # Use write_speed_mbps from cellConfig if available, otherwise create default range
         if not "write_speed_mbps" in cellConfig:
