@@ -9,11 +9,9 @@ from tests.example_tests import (
     cpu_stress_test,
     get_screen_resolution,
     check_battery_status,
-    interactive_test,
 )
 from onnyx.mqtt import BannerState
 import platform
-
 
 def example_flow(test_document: dict, settings: str):
     print("Starting example_flow")
@@ -73,34 +71,6 @@ def example_flow(test_document: dict, settings: str):
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 failure_code = rc.failure_code
             ctx.record_values(rc.return_value)
-
-        if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
-            "enable_interactive_test", True
-        ):
-            # First interactive test - Yes/No question
-            rc = interactive_test(
-                "Interactive Test 1",
-                "First example of prompting",
-                buttons=["Yes", "No", "Abort"],
-                message="Is the device powered on?",
-            )
-            if rc.failure_code != FailureCodes.NO_FAILURE:
-                failure_code = rc.failure_code
-            else:
-                ctx.record_values(rc.return_value)
-
-            # Second interactive test - Color selection
-            if failure_code == FailureCodes.NO_FAILURE:
-                rc = interactive_test(
-                    "Interactive Test 2",
-                    "Second example of prompting",
-                    buttons=["Red", "Green", "Blue", "Abort"],
-                    message="Select the color displayed on the device screen",
-                )
-                if rc.failure_code != FailureCodes.NO_FAILURE:
-                    failure_code = rc.failure_code
-                else:
-                    ctx.record_values(rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE:
             min_mbps = cellConfig.get("min_write_speed_mbps", 10)
@@ -162,7 +132,6 @@ if __name__ == "__main__":
             "cpu_usage_range": {"max": 100, "min": 1},
             "drive_letter": "C",
             "enable_camera_test": True,
-            "enable_interactive_test": True,
             "min_write_speed_mbps": 100,
             "num_test_files": 10,
             "ping_url": "https://www.google.com",

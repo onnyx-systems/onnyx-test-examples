@@ -1,12 +1,10 @@
 server:
-  url: ""
-  api_key: ""
+  url: https://app.onnyx.systems
+  api_key: <api_key>
 iot_relay:
   python_version: 3.11.7
   base_path: example_2
   entry_point: example_flow.py:example_flow
-  # Uncomment the line below to use an explicit version instead of git hash
-  # version: custom-v1
   deploy:
     - requirements.txt
     - README.md
