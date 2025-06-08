@@ -1,12 +1,18 @@
 server:
-  url: ""
-  api_key: ""
+  url: https://app.onnyx.systems
+  api_key: <api_key>
+# Name of the test type to deploy.
 widget_ist:
+  # (required) The python version to use for the test type.
   python_version: 3.11.7
+  # (required) The base path of the test type.
   base_path: example_1
+  # (required) The entry point of the test type.
   entry_point: example_flow.py:example_flow
-  # Uncomment the line below to use an explicit version instead of git hash
+  # (optional)Uncomment the line below to use an explicit version instead of git hash.
   # version: custom-v1
+  # List all files to be deployed to the station.
+  # The files are relative to the base_path.
   deploy:
     - requirements.txt
     - README.md

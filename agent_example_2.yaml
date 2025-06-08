@@ -10,7 +10,7 @@ agent_settings:
     developer_mode: true
     # working_dir is the directory where the test files are downloaded, 
     # where the venv is created.
-    working_dir: ./
+    working_dir: ./onnyx_agent_tmp_working_dir/ 
     station:
       name: IOT_RELAY_STATION_1
       cells:
