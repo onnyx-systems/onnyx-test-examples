@@ -136,7 +136,7 @@ def example_flow(test_document: dict, settings: str):
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s", rc.return_value)
 
-        if cellConfig.get("enable_test_fail", True):
+        if cellConfig.get("enable_intentional_fail", True):
             failure_code = FailureCodes.INTENTIONAL_TEST_FAIL
 
         ctx.wrap_up(failure_code)
@@ -155,7 +155,7 @@ if __name__ == "__main__":
             "num_test_files": 10,
             "ping_url": "https://www.google.com",
             "write_speed_mbps": {"max": 10000, "min": 50},
-            "enable_test_fail": False,
+            "enable_intentional_fail": False,
         },
         "_cell_settings_obj": {
             "not_used_in_this_example": "This is not used in this example",
