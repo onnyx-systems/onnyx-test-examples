@@ -28,14 +28,17 @@ def example_flow(test_document: dict, settings: str):
         failure_code = FailureCodes.NO_FAILURE
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Checking system dependencies")
             rc = check_system_dependencies("Init", "Check system dependencies")
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 ctx.logger.error("Missing required dependencies")
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Checking internet connection")
             rc = check_internet_connection(
                 "Init",
                 "Check internet connection",
@@ -49,11 +52,13 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         # clear the banner
         ctx.set_banner("", "info", BannerState.HIDDEN)
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Checking if drive is present")
             # Get default drive based on platform
             default_drive = "C" if platform.system() == "Windows" else "/"
             drive_setting = cellConfig.get("drive_letter")
@@ -71,8 +76,10 @@ def example_flow(test_document: dict, settings: str):
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 failure_code = rc.failure_code
             ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Checking disk speed")
             min_mbps = cellConfig.get("min_write_speed_mbps", 10)
             num_test_files = cellConfig.get("num_test_files", 5)
             rc = disk_test("Storage Test", "Save data", min_mbps, num_test_files)
@@ -80,17 +87,21 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
             "enable_camera_test", True
         ):
+            ctx.logger.info("Starting test: Taking picture")
             rc = take_picture("Camera Test", "Take picture")
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Performing CPU stress test")
             rc = cpu_stress_test(
                 "CPU Test",
                 "Perform CPU stress test",
@@ -100,25 +111,30 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         # clear the banner
         ctx.set_banner("", "info", BannerState.HIDDEN)
 
         if failure_code == FailureCodes.NO_FAILURE:
+            ctx.logger.info("Starting test: Getting screen resolution")
             rc = get_screen_resolution("Display Test", "Get screen resolution")
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
             "battery_test_enable", True
         ):
+            ctx.logger.info("Starting test: Checking battery status")
             rc = check_battery_status("Battery Test", "Check battery status")
             if rc.failure_code != FailureCodes.NO_FAILURE:
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s", rc.return_value)
 
         ctx.wrap_up(failure_code)
 
