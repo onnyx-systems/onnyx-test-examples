@@ -27,4 +27,4 @@ requests==2.32.3
 rich==13.9.4
 typing_extensions==4.12.2
 urllib3==2.3.0
-onnyx@https://storage.googleapis.com/onnyx-systems/packages/onnyx/onnyx-0.0.30-py3-none-any.whl
+onnyx@https://storage.googleapis.com/onnyx-systems/packages/onnyx/onnyx-0.0.31-py3-none-any.whl
