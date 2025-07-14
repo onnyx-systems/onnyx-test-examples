@@ -87,7 +87,7 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
-            ctx.logger.info("Test completed: %s", rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
             "enable_camera_test", True
@@ -98,7 +98,7 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
-            ctx.logger.info("Test completed: %s", rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
 
         if failure_code == FailureCodes.NO_FAILURE:
             ctx.logger.info("Starting test: Performing CPU stress test")
@@ -111,7 +111,7 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
-            ctx.logger.info("Test completed: %s", rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
 
         # clear the banner
         ctx.set_banner("", "info", BannerState.HIDDEN)
@@ -123,7 +123,7 @@ def example_flow(test_document: dict, settings: str):
                 failure_code = rc.failure_code
             else:
                 ctx.record_values(rc.return_value)
-            ctx.logger.info("Test completed: %s", rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
             "battery_test_enable", True
