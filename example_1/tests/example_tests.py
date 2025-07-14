@@ -36,7 +36,7 @@ class FailureCodes(FailureCode):
     MISSING_DEPENDENCIES = (-9, "Missing system dependencies")
     CPU_PERFORMANCE_FAILED = (-10, "CPU performance below requirements")
     INPUT_TIMEOUT = (-11, "Input request timed out")
-
+    INTENTIONAL_TEST_FAIL = (-12, "Intentionally failed test")
 
 @test()
 def check_internet_connection(
@@ -73,7 +73,7 @@ def check_internet_connection(
     """
     context = gcc()  # Get current context
     ping_results = []
-    csv_path = "ping_results.csv"
+    csv_path = context.get_test_dir() + "/ping_results.csv"
 
     # Only update banner at start and end of test
     context.set_banner("Running internet connection test...", "info", BannerState.SHOWING)
@@ -295,7 +295,7 @@ def disk_test(
 
         results = []
         write_speeds = []
-        csv_path = f"disk_test_results.csv"
+        csv_path = context.get_test_dir() + "/disk_test_results.csv"
 
         # Increase test file size to 100MB for more accurate measurements
         TEST_FILE_SIZE_MB = 100
@@ -315,7 +315,7 @@ def disk_test(
             )
 
             for i in range(num_files):
-                file_path = f"disk_test_file_{i+1}.dat"
+                file_path = context.get_test_dir() + f"/disk_test_file_{i+1}.dat"
 
                 try:
                     # Ensure we start with a clean file
@@ -674,19 +674,35 @@ def get_screen_resolution(category: str = None, test_name: str = None):
         else:
             # Linux implementation using xrandr
             try:
-                output = subprocess.check_output(["xrandr"]).decode()
-                # Parse the current resolution
-                current = [line for line in output.split("\n") if " connected" in line][
-                    0
-                ]
-                resolution = current.split()[2]
-                if "x" in resolution:
-                    width, height = map(int, resolution.split("x"))
+                # Get xrandr output and find current resolution (marked with *)
+                output = subprocess.check_output(["xrandr"], text=True)
+                
+                # Look for lines with asterisk (current resolution)
+                for line in output.split('\n'):
+                    if '*' in line:
+                        # Extract resolution (format: "   1920x1080     60.00*+  59.93")
+                        parts = line.strip().split()
+                        if parts and 'x' in parts[0]:
+                            width, height = map(int, parts[0].split('x'))
+                            break
                 else:
-                    # Fallback if primary method fails
-                    width = height = 0
-            except (subprocess.CalledProcessError, IndexError):
-                # Fallback for systems without X11
+                    # If no asterisk found, try connected displays
+                    for line in output.split('\n'):
+                        if ' connected' in line and 'x' in line:
+                            # Parse line like "DP-1 connected primary 1920x1080+0+0"
+                            parts = line.split()
+                            for part in parts:
+                                if 'x' in part and '+' in part:
+                                    resolution = part.split('+')[0]
+                                    width, height = map(int, resolution.split('x'))
+                                    break
+                            else:
+                                continue
+                            break
+                    else:
+                        width = height = 0
+            except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+                # Fallback for systems without X11 or parsing errors
                 width = height = 0
 
         # Check width and height against minimum requirements
