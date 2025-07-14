@@ -136,6 +136,9 @@ def example_flow(test_document: dict, settings: str):
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s", rc.return_value)
 
+        if cellConfig.get("enable_test_fail", True):
+            failure_code = FailureCodes.INTENTIONAL_TEST_FAIL
+
         ctx.wrap_up(failure_code)
 
 
@@ -147,11 +150,12 @@ if __name__ == "__main__":
             "cpu_stress_duration": 5,
             "cpu_usage_range": {"max": 100, "min": 1},
             "drive_letter": "C",
-            "enable_camera_test": True,
-            "min_write_speed_mbps": 100,
+            "enable_camera_test": False,
+            "min_write_speed_mbps": 50,
             "num_test_files": 10,
             "ping_url": "https://www.google.com",
-            "write_speed_mbps": {"max": 10000, "min": 500},
+            "write_speed_mbps": {"max": 10000, "min": 50},
+            "enable_test_fail": False,
         },
         "_cell_settings_obj": {
             "not_used_in_this_example": "This is not used in this example",

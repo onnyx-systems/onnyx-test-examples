@@ -30,3 +30,7 @@ bazel-onnyx
 bazel-onnyx-test
 bazel-onnyx-test-logs
 bazel-onnyx-test-examples
+
+
+# onnyx_test_dir
+onnyx_test_dir/
