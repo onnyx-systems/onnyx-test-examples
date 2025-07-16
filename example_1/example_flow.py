@@ -27,6 +27,9 @@ def example_flow(test_document: dict, settings: str):
 
         failure_code = FailureCodes.NO_FAILURE
 
+        if failure_code == FailureCodes.NO_FAILURE and cellConfig.get("enable_intentional_fail", False):
+            failure_code = FailureCodes.INTENTIONAL_TEST_FAIL
+
         if failure_code == FailureCodes.NO_FAILURE:
             ctx.logger.info("Starting test: Checking system dependencies")
             rc = check_system_dependencies("Init", "Check system dependencies")
@@ -135,9 +138,6 @@ def example_flow(test_document: dict, settings: str):
             else:
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s", rc.return_value)
-
-        if cellConfig.get("enable_intentional_fail", True):
-            failure_code = FailureCodes.INTENTIONAL_TEST_FAIL
 
         ctx.wrap_up(failure_code)
 
