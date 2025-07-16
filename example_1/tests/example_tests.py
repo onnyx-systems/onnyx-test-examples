@@ -73,7 +73,7 @@ def check_internet_connection(
     """
     context = gcc()  # Get current context
     ping_results = []
-    csv_path = context.get_test_dir() + "/ping_results.csv"
+    csv_path = "ping_results.csv"
 
     # Only update banner at start and end of test
     context.set_banner("Running internet connection test...", "info", BannerState.SHOWING)
@@ -295,7 +295,7 @@ def disk_test(
 
         results = []
         write_speeds = []
-        csv_path = context.get_test_dir() + "/disk_test_results.csv"
+        csv_path = "disk_test_results.csv"
 
         # Increase test file size to 100MB for more accurate measurements
         TEST_FILE_SIZE_MB = 100
@@ -315,7 +315,7 @@ def disk_test(
             )
 
             for i in range(num_files):
-                file_path = context.get_test_dir() + f"/disk_test_file_{i+1}.dat"
+                file_path = f"disk_test_file_{i+1}.dat"
 
                 try:
                     # Ensure we start with a clean file
