@@ -28,6 +28,8 @@ def example_flow(test_document: dict, settings: str):
         failure_code = FailureCodes.NO_FAILURE
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get("enable_intentional_fail", False):
+            ctx.set_banner("Running intentional test fail...", "info", BannerState.SHOWING)
+            ctx.logger.info("Starting test: Intentional test fail")
             failure_code = FailureCodes.INTENTIONAL_TEST_FAIL
 
         if failure_code == FailureCodes.NO_FAILURE:
@@ -56,9 +58,6 @@ def example_flow(test_document: dict, settings: str):
             else:
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s", rc.return_value)
-
-        # clear the banner
-        ctx.set_banner("", "info", BannerState.HIDDEN)
 
         if failure_code == FailureCodes.NO_FAILURE:
             ctx.logger.info("Starting test: Checking if drive is present")
@@ -115,9 +114,6 @@ def example_flow(test_document: dict, settings: str):
             else:
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
-
-        # clear the banner
-        ctx.set_banner("", "info", BannerState.HIDDEN)
 
         if failure_code == FailureCodes.NO_FAILURE:
             ctx.logger.info("Starting test: Getting screen resolution")
