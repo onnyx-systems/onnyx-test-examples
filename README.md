@@ -73,55 +73,82 @@ To create your own test flow based on these examples:
 
 ## Continuous Integration and Deployment
 
-This repository uses GitHub Actions for continuous integration and deployment of test flows to the Onnyx platform. The deployment process is automated through a workflow defined in `.github/workflows/deploy.yml`.
+This repository uses GitHub Actions for continuous integration and deployment of test flows to the Onnyx platform. The deployment workflow is defined in `.github/workflows/deploy.yml`.
 
 ### How the CI/CD Pipeline Works
 
-When changes are pushed to the `main` branch or a pull request is created targeting the `main` branch, the following automated process occurs:
+When changes are pushed to the `main` branch, a pull request is created targeting the `main` branch, or the workflow is manually triggered, the following automated process occurs:
 
-1. **Checkout**: The repository code is checked out.
-2. **Setup Deployer**: The workflow fetches the latest version of the Onnyx deployer tool from the Onnyx server and prepares it for use.
-3. **Deploy to Onnyx**: The workflow updates the existing `deploy.yaml` file with server connection details and runs the deployment process.
+1. **Checkout**: The repository code is checked out using actions/checkout@v3.
+2. **Setup Deployer**: The workflow fetches the latest version of the Onnyx deployer tool:
+   - Retrieves metadata about the latest deployer version
+   - Downloads the appropriate Linux version of the deployer
+   - Makes the deployer executable
+3. **Deploy to Onnyx**: The workflow:
+   - Verifies that deploy.yaml exists in the repository
+   - Updates the deploy.yaml with server configuration (URL, API key, and version)
+   - Runs the deployment using the Onnyx deployer tool
 
-The workflow is designed to fail explicitly if any step encounters an issue, making troubleshooting straightforward.
+The workflow provides detailed error messages at each step and will fail explicitly if any issues are encountered.
 
 ### Configuration
 
-The deployment process uses the following configuration:
+The deployment process relies on these GitHub secrets:
 
-- **Server URL**: Configured via the `ONNYX_SERVER_URL` GitHub secret
-- **API Key**: Configured via the `ONNYX_API_KEY` GitHub secret
-- **Version**: Automatically set to the current commit SHA
+- **ONNYX_SERVER_URL**: The URL of the Onnyx server
+- **ONNYX_API_KEY**: API key for authentication with the Onnyx server
 
-The workflow preserves your existing `deploy.yaml` file configuration and only adds/updates the server connection details. This means you can maintain your test configuration in the repository while the sensitive server details are securely stored as GitHub secrets.
+The version is automatically set to the current commit SHA (`github.sha`).
+
+The workflow preserves your existing `deploy.yaml` configuration and only adds/updates the server connection details.
+
+### Required Files
+
+Each test example must include a `deploy.yaml` file with configuration like:
+
+```yaml
+test_global:
+  python_version: "3.11.7"
+  base_path: "./"
+  deploy:
+    - files:
+        - "requirements.txt"
+
+tests:
+  - name: "example_test"
+    entry_point: "example_flow.py:example_flow"
+    deploy:
+      - files:
+          - "example_flow.py"
+      - folders:
+          - "tests"
+```
 
 ### Manual Deployment
 
-You can also trigger the deployment workflow manually through the GitHub Actions interface by selecting the "Deploy Test Flow" workflow and clicking "Run workflow".
+You can trigger the deployment workflow manually through the GitHub Actions interface by selecting the "Deploy Test Flow" workflow and clicking "Run workflow".
 
 ### Troubleshooting Deployment
 
-If the deployment fails, check the GitHub Actions logs for detailed error messages. The workflow is designed to fail explicitly at any step that encounters an issue, with no fallback mechanisms. Common issues include:
+If deployment fails, check the GitHub Actions logs for detailed error messages. Common issues include:
 
 - Invalid API credentials
 - Network connectivity problems
-- Missing deploy.yaml file (the workflow requires an existing deploy.yaml file)
-- Incorrectly formatted deploy.yaml file
+- Missing or incorrectly formatted deploy.yaml file
 - Server-side issues with the Onnyx platform
-- Missing or invalid deployer version metadata
 
 ### Local Deployment
 
-To deploy from your local machine instead of using the CI/CD pipeline:
+To deploy locally:
 
 1. Download the latest deployer tool from the Onnyx server
-2. Update your `deploy.yaml` file with your server URL and API key in the server section:
+2. Create or update your `deploy.yaml` file with server information:
    ```yaml
    server:
      url: "your-onnyx-server-url"
      api_key: "your-api-key"
    ```
-3. Run the deployer tool with the command: `./deploy_to_onnyx -config deploy.yaml`
+3. Run the deployer: `./deploy_to_onnyx -config deploy.yaml`
 
 ## Contributing
 

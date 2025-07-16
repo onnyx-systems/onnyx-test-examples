@@ -1,0 +1,11 @@
+server:
+  url: http://192.168.86.25:3001
+  api_key: dda4829f-c35e-45af-a36b-c82e0cd96036
+iot_relay:
+  python_version: 3.11.7
+  base_path: ./
+  entry_point: example_flow.py:example_flow
+  deploy:
+    - requirements.txt
+    - tests/
+    - example_flow.py

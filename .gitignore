@@ -11,9 +11,11 @@ __pycache__
 .venv*
 
 *.log
+*.log.*
 temp_*
 */dev_mode
-
+*/test_outputs
+*/onnyx_test_dir
 
 # go
 *.exe
@@ -34,3 +36,9 @@ bazel-onnyx-test-examples
 
 # onnyx_test_dir
 onnyx_test_dir/
+.claude
+
+*.zip
+*.pdf
+
+*/.requirements.hash

@@ -136,7 +136,7 @@ class TasmotaSerialDriver:
                     # No JSON found, return raw response
                     return {"raw_response": response}
             except json.JSONDecodeError as e:
-                self.logger.warning(f"Failed to parse JSON response: {str(e)}")
+                # self.logger.warning(f"Failed to parse JSON response: {str(e)}")
                 # Return raw response if JSON parsing fails
                 return {"raw_response": response}
 

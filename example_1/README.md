@@ -14,7 +14,6 @@ This test is designed to verify that a device (like a laptop or computer) is fun
 - CPU performance under stress
 - Screen resolution verification
 - Battery status and health (if applicable)
-- Interactive user tests (optional)
 
 ## Test Flow Diagram
 
@@ -26,17 +25,8 @@ flowchart TD
     SysDep -->|Success| Internet[Check Internet Connection]
     SysDep -->|Failure| Fail([Test Failed])
 
-    Internet -->|Success| Interactive{Interactive Tests Enabled?}
+    Internet -->|Success| DriveCheck[Check Drive Presence]
     Internet -->|Failure| Fail
-
-    Interactive -->|Yes| Interactive1[Interactive Test 1]
-    Interactive -->|No| DriveCheck[Check Drive Presence]
-
-    Interactive1 -->|Success| Interactive2[Interactive Test 2]
-    Interactive1 -->|Failure| Fail
-
-    Interactive2 -->|Success| DriveCheck
-    Interactive2 -->|Failure| Fail
 
     DriveCheck -->|Success| DiskTest[Disk Write Speed Test]
     DriveCheck -->|Failure| Fail
@@ -69,17 +59,18 @@ The test uses a configuration object called `_cell_config_obj` that controls how
 
 | Setting                   | Description                                  | Default Value                  |
 | ------------------------- | -------------------------------------------- | ------------------------------ |
-| `battery_test_enable`     | Whether to check the battery status          | `True`                         |
+| `battery_test_enable`     | Whether to check the battery status          | `False`                        |
 | `cpu_stress_duration`     | How long to stress test the CPU (in seconds) | `5`                            |
 | `cpu_usage_range`         | Acceptable range for CPU usage (%)           | `{"min": 1, "max": 100}`       |
 | `drive_letter`            | Which drive to check                         | `"C"` on Windows, `/` on Linux |
-| `enable_camera_test`      | Whether to test the camera                   | `True`                         |
-| `enable_interactive_test` | Whether to run tests that need user input    | `True`                         |
-| `min_write_speed_mbps`    | Minimum acceptable disk write speed (MB/s)   | `100`                          |
+| `enable_camera_test`      | Whether to test the camera                   | `False`                        |
+| `min_write_speed_mbps`    | Minimum acceptable disk write speed (MB/s)   | `10`                           |
 | `num_test_files`          | Number of files to create during disk test   | `10`                           |
 | `ping_url`                | Website to ping for internet test            | `"https://www.google.com"`     |
 | `num_pings`               | Number of pings to perform                   | `5`                            |
-| `write_speed_mbps`        | Acceptable range for disk write speed        | `{"min": 500, "max": 10000}`   |
+| `ping_interval`           | Time between pings in seconds                | `1.0`                          |
+| `write_speed_mbps`        | Acceptable range for disk write speed        | `{"min": 300, "max": 10000}`   |
+| `skip_screen_resolution_check` | Skip screen resolution test for headless systems | `False`              |
 
 ## Configuration to Test Relationship
 
@@ -88,6 +79,7 @@ flowchart LR
     subgraph Config["Configuration Options"]
         ping_url["ping_url"]
         num_pings["num_pings"]
+        ping_interval["ping_interval"]
         drive_letter["drive_letter"]
         min_write_speed["min_write_speed_mbps"]
         num_test_files["num_test_files"]
@@ -96,7 +88,7 @@ flowchart LR
         cpu_duration["cpu_stress_duration"]
         cpu_range["cpu_usage_range"]
         battery_enable["battery_test_enable"]
-        interactive_enable["enable_interactive_test"]
+        skip_screen["skip_screen_resolution_check"]
     end
 
     subgraph Tests["Test Functions"]
@@ -107,11 +99,11 @@ flowchart LR
         cpu["CPU Stress Test"]
         screen["Screen Resolution Check"]
         battery["Battery Status Check"]
-        interactive["Interactive Tests"]
     end
 
     ping_url --> internet
     num_pings --> internet
+    ping_interval --> internet
     drive_letter --> drive
     min_write_speed --> disk
     num_test_files --> disk
@@ -120,7 +112,7 @@ flowchart LR
     cpu_duration --> cpu
     cpu_range --> cpu
     battery_enable --> battery
-    interactive_enable --> interactive
+    skip_screen --> screen
 ```
 
 ## Test Components Diagram
@@ -151,14 +143,9 @@ classDiagram
         +check_battery_status()
     }
 
-    class UserTests {
-        +interactive_test()
-    }
-
     TestFlow --> SystemTests: runs
     TestFlow --> StorageTests: runs
     TestFlow --> HardwareTests: runs
-    TestFlow --> UserTests: runs if enabled
 ```
 
 ## How Each Test Works
@@ -170,10 +157,6 @@ Verifies that all required software is installed on the computer. This ensures t
 ### Internet Connection Test
 
 Pings a website (default: Google) to check if the internet is working. The test measures response times and verifies connectivity by sending multiple ping requests.
-
-### Interactive Tests
-
-If enabled, asks the user questions that require manual responses. These tests can verify user interface elements or gather information that can only be provided by a human operator.
 
 ### Drive Presence Check
 
@@ -207,6 +190,50 @@ Each test returns one of these results:
 - **Failure**: The test failed with a specific error code (see Failure Codes section)
 - **Exception**: An unexpected error occurred during test execution
 
+## Test Output Files
+
+The test framework creates detailed output files in the `test_outputs/` directory. These files contain comprehensive data about each test run:
+
+### CSV Files (Data Logs)
+- **`ping_results.csv`**: Network ping test results with response times
+  - Format: `ping_number,timestamp,url,ping_time_ms,status,attempt,response_code`
+- **`cpu_stress_samples.csv`**: CPU usage samples during stress testing
+  - Format: `sample_number,timestamp,cpu_percent,test_phase`
+- **`disk_test_results.csv`**: Disk write test results for each file
+  - Format: `file,write_time_seconds,write_speed_mbps,file_size_mb,start_time,end_time`
+
+### JSON Files (Test Summaries)
+- **`system_dependencies_report.json`**: System dependency check results
+- **`internet_connection_summary.json`**: Internet connection test summary with statistics
+- **`internet_connection_failure.json`**: Internet connection failure details (if test fails)
+- **`drive_check_success.json`**: Drive presence verification results
+- **`drive_check_failure.json`**: Drive check failure details (if test fails)
+- **`disk_test_summary.json`**: Disk performance test results and file write speeds
+- **`disk_test_speed_failure.json`**: Disk speed failure details (if speed is out of range)
+- **`disk_test_failure.json`**: Disk test failure details (if test fails)
+- **`camera_test_results.json`**: Camera test results with image analysis metrics
+- **`cpu_stress_summary.json`**: CPU stress test results and performance metrics
+- **`cpu_stress_failure.json`**: CPU stress test failure details (if test fails)
+- **`screen_resolution_results.json`**: Screen resolution detection results
+- **`screen_resolution_headless.json`**: Screen resolution info for headless environments
+- **`battery_status_results.json`**: Battery status and charging information
+
+### File Structure Example
+```
+test_outputs/
+├── ping_results.csv
+├── cpu_stress_samples.csv
+├── disk_test_results.csv
+├── system_dependencies_report.json
+├── internet_connection_summary.json
+├── drive_check_success.json
+├── disk_test_summary.json
+├── camera_test_results.json
+├── cpu_stress_summary.json
+├── screen_resolution_results.json
+└── battery_status_results.json
+```
+
 ## How to Run the Test
 
 The test is run by executing the `example_flow.py` script, which uses the configuration settings to determine which tests to run and what parameters to use.
@@ -218,18 +245,23 @@ from example_flow import example_flow
 # Create test document with configuration
 test_document = {
     "_cell_config_obj": {
-        "battery_test_enable": True,
+        "battery_test_enable": False,
         "cpu_stress_duration": 5,
-        "enable_camera_test": True,
-        # Add other configuration options as needed
+        "cpu_usage_range": {"max": 100, "min": 1},
+        "drive_letter": "C",
+        "enable_camera_test": False,
+        "num_test_files": 10,
+        "ping_url": "https://www.google.com",
+        "write_speed_mbps": {"max": 10000, "min": 300},
+        "skip_screen_resolution_check": False,
     },
     "_cell_settings_obj": {
-        # Settings for the test environment
+        "not_used_in_this_example": "This is not used in this example",
     }
 }
 
 # Run the test flow
-example_flow(test_document, settings={})
+example_flow(test_document, "DEV")
 ```
 
 ## Failure Codes
@@ -251,7 +283,6 @@ classDiagram
         +WRITE_SPEED_BELOW_MIN: -8
         +MISSING_DEPENDENCIES: -9
         +CPU_PERFORMANCE_FAILED: -10
-        +INPUT_TIMEOUT: -11
     }
 ```
 
@@ -268,6 +299,9 @@ If tests fail, here are some common solutions:
 | CAMERA_NOT_AVAILABLE       | Check camera drivers or hardware connections                       |
 | CPU_PERFORMANCE_FAILED     | Check for thermal throttling or background processes               |
 | NO_BATTERY                 | Connect battery or run on a device with battery                    |
+| ERROR_CREATING_DATA        | Check file system permissions and available disk space            |
+| ERROR_SAVING_DATA          | Verify disk write permissions and available storage               |
+| IMAGE_CAPTURE_FAILED       | Check camera connectivity and try restarting the camera driver    |
 
 ## Extending the Test Flow
 

@@ -2,19 +2,19 @@ agent_settings:
   api:
     server_url: https://app.onnyx.systems
     api_key: <api_key>
-  # The below agent settings specify which station to act as, and which test type to 
+  # The below agent settings specify which station to act as, and which test type to
   # download and run.
   agent:
     # If developer_mode is true, the agent will use the developer settings within each cell
     # instead of downloading test deployements.
     developer_mode: true
-    # working_dir is the directory where the test files are downloaded, 
+    # working_dir is the directory where the test files are downloaded,
     # where the venv is created.
-    working_dir: ./onnyx_agent_tmp_working_dir/ 
+    working_dir: ./onnyx_agent_tmp_working_dir/
     station:
       name: IOT_RELAY_STATION_1
       cells:
-        # The name should match the 
+        # The name should match the
         - name: A
           test_type: iot_relay
           # Deployment setting is only used if developer_mode is false

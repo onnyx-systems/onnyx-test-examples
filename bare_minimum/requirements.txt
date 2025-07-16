@@ -1,0 +1,25 @@
+argon2-cffi==23.1.0
+argon2-cffi-bindings==21.2.0
+certifi==2024.8.30
+cffi==1.17.1
+charset-normalizer==3.4.0
+dnspython==2.6.1
+idna==3.10
+minio==7.2.11
+numpy==2.1.2
+opencv-python==4.10.0.84
+paho-mqtt==2.1.0
+pillow==10.4.0
+psutil==6.0.0
+puremagic==1.27
+pycparser==2.22
+pycryptodome==3.21.0
+pymongo==4.9.1
+pyserial==3.5
+pyusb==1.2.1
+PyVISA==1.14.1
+PyYAML==6.0.2
+requests==2.32.3
+typing_extensions==4.12.2
+urllib3==2.2.3
+onnyx @ https://storage.googleapis.com/onnyx-systems/packages/onnyx/onnyx-0.0.16-py3-none-any.whl
