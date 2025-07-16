@@ -389,7 +389,11 @@ def disk_test(
                         context.logger.error(f"Error cleaning up file {file_path}: {e}")
 
         # Save the csv file for uploading to Onnyx
-        context.record_file(csv_path)
+        try:
+            context.record_file(csv_path)
+        except Exception as e:
+            context.logger.error(f"Failed to record CSV file: {e}")
+            # Continue with test results even if file recording fails
 
         if not write_speeds:
             return TestResult(
