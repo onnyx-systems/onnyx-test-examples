@@ -22,12 +22,15 @@ void setup() {
   
   test_state.test_start_time = millis();
   
-  // Print startup message
-  Serial.println("================================");
-  Serial.println("Sonoff Test Firmware v" FIRMWARE_VERSION);
-  Serial.println("Manufacturing Test CLI");
-  Serial.println("================================");
-  Serial.println("Type 'help' for commands");
+  // Print startup message (Tasmota-style)
+  Serial.println();
+  Serial.println("00:00:00.001 Project tasmota - Tasmota Version " FIRMWARE_VERSION);
+  Serial.println("00:00:00.002 (Emulated for Testing)");
+  Serial.println();
+  
+  // Send initial status to mimic Tasmota behavior
+  Serial.println("{\"StatusSTS\":{\"POWER\":\"OFF\",\"POWER1\":\"OFF\"}}");
+  Serial.println();
   Serial.print("> ");
   Serial.flush();
 }

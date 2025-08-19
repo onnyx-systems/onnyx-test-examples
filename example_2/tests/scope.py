@@ -12,20 +12,6 @@ from .rigol_driver import RigolOscilloscopeDriver
 from .tasmota_driver import TasmotaSerialDriver
 from .failure_codes import FailureCodes
 
-def should_simulate_failure(failure_code: int) -> bool:
-    """Helper function to determine if we should simulate a failure."""
-    import random
-    context = gcc()
-    failure_chance = context.document.get("_cell_config_obj", {}).get("enable_intentional_fail")
-    
-    # If failure_chance is 0 or not set, never simulate failures
-    if not failure_chance:
-        return False
-
-    fail = random.random() < failure_chance
-    if fail:
-        context.logger.warning(f"Simulating failure: {failure_code}")
-    return fail
 
 
 @test()
@@ -74,7 +60,7 @@ def detect_oscilloscope(
             
         # Port is open, try to connect as oscilloscope
         scope = RigolOscilloscopeDriver(ip_address, port, logger=context.logger)
-        if not scope.connect() or should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
+        if not scope.connect():
             return TestResult(
                 f"Failed to connect to oscilloscope at {ip_address}",
                 FailureCodes.OSCILLOSCOPE_ERROR
@@ -87,7 +73,7 @@ def detect_oscilloscope(
             # Check if it's a Rigol scope
             if any(model in idn.upper() for model in [
                 "RIGOL", "DS1", "DS2", "DS4", "DS6", "DS7", "MSO5", "MSO7"
-            ]) and not should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
+            ]):
                 context.logger.info(f"Found oscilloscope at {ip_address}: {idn}")
                 return TestResult(
                     f"Found Rigol oscilloscope at {ip_address}",
@@ -290,7 +276,6 @@ def capture_relay_transition(
     try:
         # Get context to access config
         context = gcc()
-        failure_chance = context.document.get("_cell_config_obj", {}).get("enable_intentional_fail")
         
         # Configure single trigger for relay test
         oscilloscope.send_command(":TRIGger:SWEep SINGle")
@@ -301,14 +286,10 @@ def capture_relay_transition(
         
         # Toggle relay (unless simulating failure)
         action = "on" if turn_on else "off"
-        logger.info(f"Turning relay {relay_number} {action}")
+        logger.info(f"Turning relay 1 {action}")
         
-        if turn_on and failure_chance and random.random() < failure_chance:
-            # Simulate mechanical failure by not actually turning on the relay
-            logger.info("Simulating mechanical failure - relay did not actuate")
-        else:
-            if not tasmota.set_power(turn_on, relay_number):
-                return None
+        if not tasmota.set_power(turn_on, 1):
+            return None
         
         # Wait for trigger and capture with polling instead of fixed delay
         timeout = 4  # Reduced from 5 seconds

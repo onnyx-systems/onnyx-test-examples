@@ -11,5 +11,9 @@ void processCommand(String cmd);
 void printStatus();
 void printHelp();
 void burnInTest(unsigned long cycles, unsigned long interval);
+void printTasmotaStatus();
+void printTasmotaStatus1();
+void printTasmotaStatus2();
+void printTasmotaStatusSTS();
 
 #endif // COMMANDS_H

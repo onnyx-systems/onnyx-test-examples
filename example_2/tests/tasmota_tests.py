@@ -3,7 +3,6 @@ import serial.tools.list_ports
 import re
 from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
-import random
 
 from onnyx.context import gcc
 from onnyx.decorators import test
@@ -36,26 +35,6 @@ def parse_version(version_str: str) -> Tuple[int, ...]:
         return (0, 0, 0)  # Default version if no numbers found
     return tuple(map(int, matches[:3]))  # Take first 3 numbers
 
-def should_simulate_failure(failure_code: int) -> bool:
-    """Helper function to determine if we should simulate a failure.
-    
-    Args:
-        failure_code: The failure code that would be returned
-        
-    Returns:
-        bool: True if we should simulate this failure
-    """
-    context = gcc()
-    failure_chance = context.document.get("_cell_config_obj", {}).get("enable_intentional_fail")
-    
-    # If failure_chance is 0 or not set, never simulate failures
-    if not failure_chance:
-        return False
-
-    fail = random.random() < failure_chance
-    if fail:
-        context.logger.warning(f"Simulating failure: {failure_code}")
-    return fail
 
 def check_required_config(config: Dict[str, Any], required_keys: List[str]) -> Optional[TestResult]:
     """Helper function to check if required configuration keys are present.
@@ -103,7 +82,7 @@ def detect_tasmota_serial_port(
             if p.manufacturer and ("FTDI" in p.manufacturer or "ftdi" in p.manufacturer.lower()):
                 ftdi_ports.append(p.device)
                 
-        if not ftdi_ports or should_simulate_failure(FailureCodes.DEVICE_NOT_FOUND.value):
+        if not ftdi_ports:
             return TestResult(
                 "No FTDI devices found",
                 FailureCodes.DEVICE_NOT_FOUND
@@ -112,12 +91,12 @@ def detect_tasmota_serial_port(
         # Try each FTDI port
         for test_port in ftdi_ports:
             driver = TasmotaSerialDriver(test_port, baudrate)
-            if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+            if not driver.connect():
                 continue
                 
             # Get device info to verify it's a Tasmota device
             device_info = driver.get_device_info()
-            if device_info and not should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+            if device_info:
                 return TestResult(
                     f"Connected to Tasmota device on {test_port}",
                     FailureCodes.NO_FAILURE,
@@ -135,14 +114,14 @@ def detect_tasmota_serial_port(
     
     # Try specified port
     driver = TasmotaSerialDriver(port, baudrate)
-    if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+    if not driver.connect():
         return TestResult(
             f"Failed to connect to {port}",
             FailureCodes.CONNECTION_ERROR
         )
         
     device_info = driver.get_device_info()
-    if device_info and not should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+    if device_info:
         return TestResult(
             f"Connected to Tasmota device on {port}",
             FailureCodes.NO_FAILURE,
@@ -177,7 +156,7 @@ def check_firmware_version(
         TestResult with firmware version
     """
     driver = TasmotaSerialDriver(port)
-    if not driver.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+    if not driver.connect():
         return TestResult(
             f"Failed to connect to {port}",
             FailureCodes.CONNECTION_ERROR
@@ -185,7 +164,7 @@ def check_firmware_version(
         
     try:
         version = driver.get_firmware_version()
-        if not version or should_simulate_failure(FailureCodes.FIRMWARE_ERROR.value):
+        if not version:
             return TestResult(
                 "Failed to get firmware version",
                 FailureCodes.FIRMWARE_ERROR
@@ -195,7 +174,7 @@ def check_firmware_version(
         current = parse_version(version)
         minimum = parse_version(min_version)
         
-        if current >= minimum and not should_simulate_failure(FailureCodes.FIRMWARE_ERROR.value):
+        if current >= minimum:
             return TestResult(
                 f"Firmware version {version} meets minimum {min_version}",
                 FailureCodes.NO_FAILURE,
@@ -217,8 +196,7 @@ def check_firmware_version(
 def test_relay_response(
     category: str,
     test_name: str,
-    serial_port: str,
-    relay_number: int = 1
+    serial_port: str
 ) -> TestResult:
     """Test relay response characteristics using oscilloscope measurements.
     
@@ -226,7 +204,6 @@ def test_relay_response(
         category: Test category for reporting and organization
         test_name: Name of this specific test instance
         serial_port: Serial port for Tasmota device
-        relay_number: Relay number to test (default: 1)
         
     Returns:
         TestResult: Test result with measurement data
@@ -238,7 +215,7 @@ def test_relay_response(
         # Get oscilloscope from context
         context = gcc()
         oscilloscope = context.document.get("_oscilloscope")
-        if not oscilloscope or should_simulate_failure(FailureCodes.OSCILLOSCOPE_ERROR.value):
+        if not oscilloscope:
             return TestResult(
                 "No oscilloscope available - run connect_oscilloscope first",
                 FailureCodes.OSCILLOSCOPE_ERROR
@@ -258,7 +235,7 @@ def test_relay_response(
         # Connect to Tasmota device first
         logger.info("Connecting to Tasmota device...")
         tasmota = TasmotaSerialDriver(serial_port)
-        if not tasmota.connect() or should_simulate_failure(FailureCodes.CONNECTION_ERROR.value):
+        if not tasmota.connect():
             return TestResult(
                 f"Failed to connect to Tasmota device on {serial_port}",
                 FailureCodes.CONNECTION_ERROR
@@ -266,10 +243,10 @@ def test_relay_response(
             
         try:
             # Turn relay ON to verify AC signal
-            logger.info(f"Turning relay {relay_number} ON to verify AC signal")
-            if not tasmota.set_power(True, relay_number) or should_simulate_failure(FailureCodes.RELAY_ERROR.value):
+            logger.info("Turning relay 1 ON to verify AC signal")
+            if not tasmota.set_power(True, 1):
                 return TestResult(
-                    f"Failed to turn on relay {relay_number}",
+                    "Failed to turn on relay 1",
                     FailureCodes.RELAY_ERROR
                 )
             time.sleep(0.5)  # Reduced: Let relay settle (was 1s)
@@ -337,7 +314,7 @@ def test_relay_response(
                         time.sleep(0.5)  # Reduced wait time (was 1s)
             
             # Check if we got any valid measurements
-            if not freq_values or not vrms_values or should_simulate_failure(FailureCodes.MEASUREMENT_ERROR.value):
+            if not freq_values or not vrms_values:
                 return TestResult(
                     "Failed to get valid measurements",
                     FailureCodes.MEASUREMENT_ERROR
@@ -393,8 +370,7 @@ def test_relay_response(
             nwidth_response = oscilloscope.query(":MEASure:ITEM? NWIDTH,CHANnel1").strip()
             
             # Check for invalid measurements
-            if (not period_response or not pwidth_response or not nwidth_response or 
-                should_simulate_failure(FailureCodes.MEASUREMENT_ERROR.value)):
+            if not period_response or not pwidth_response or not nwidth_response:
                 measurements = {
                     'frequency_hz': freq_values,
                     'vpp_volts': vpp_values,
@@ -496,9 +472,9 @@ def test_relay_response(
                           f"Voltage Variation: {voltage_stability['variation_coefficient']:.2f}%")
                 
                 # Turn relay off to prepare for turn-on capture
-                if not tasmota.set_power(False, relay_number) or should_simulate_failure(FailureCodes.RELAY_ERROR.value):
+                if not tasmota.set_power(False, 1):
                     return TestResult(
-                        f"Failed to turn off relay {relay_number}",
+                        "Failed to turn off relay 1",
                         FailureCodes.RELAY_ERROR,
                         return_value=measurements
                     )
@@ -506,7 +482,7 @@ def test_relay_response(
                 
                 # Capture turn-on transition
                 turn_on_waveform = capture_relay_transition(
-                    oscilloscope, tasmota, relay_number, True, logger
+                    oscilloscope, tasmota, 1, True, logger
                 )
                 if turn_on_waveform is None:
                     # If we got a timeout waiting for trigger, it's likely a relay actuation failure

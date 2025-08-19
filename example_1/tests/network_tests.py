@@ -70,7 +70,7 @@ def check_internet_connection(
 
             # Append to CSV file
             append_csv(
-                result,
+                [result],
                 "ping_results",
                 ["ping_number", "timestamp", "url", "ping_time_ms", "status", "attempt", "response_code"]
             )
@@ -97,7 +97,7 @@ def check_internet_connection(
             
             # Append to CSV file
             append_csv(
-                result,
+                [result],
                 "ping_results",
                 ["ping_number", "timestamp", "url", "ping_time_ms", "status", "attempt", "error"]
             )

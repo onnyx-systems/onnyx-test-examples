@@ -128,8 +128,9 @@ class TasmotaSerialDriver:
             try:
                 # Look for JSON objects in the response
                 json_start = response.find('{')
-                if json_start >= 0:
-                    json_str = response[json_start:]
+                json_end = response.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = response[json_start:json_end]
                     result = json.loads(json_str)
                     return result
                 else:

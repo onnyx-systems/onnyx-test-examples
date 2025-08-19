@@ -62,8 +62,10 @@ def example_flow(test_document, settings):
             "baudrate",
             "oscilloscope_port", 
             "oscilloscope_timebase",
-            "relay_number",
-            "enable_intentional_fail"
+            "ac_frequency_range",
+            "ac_voltage_range",
+            "duty_cycle_range",
+            "voltage_stability_range"
         ])
         if config_check:
             failure_code = config_check
@@ -86,7 +88,6 @@ def example_flow(test_document, settings):
         oscilloscope_ip = cellSettings.get("oscilloscope_ip")
         oscilloscope_port = cellConfig.get("oscilloscope_port")
         oscilloscope_timebase = cellConfig.get("oscilloscope_timebase")
-        relay_number = cellConfig.get("relay_number")
 
         # STEP 1: Detect and connect to Tasmota device
         ctx.logger.info("STEP 1: Detecting and connecting to Tasmota device")
@@ -184,7 +185,7 @@ def example_flow(test_document, settings):
         # STEP 4: Test relay response with oscilloscope
         ctx.logger.info("STEP 4: Testing relay response")
         rc = test_relay_response(
-            "Relay", "Test response", serial_port, relay_number  # category  # test_name
+            "Relay", "Test response", serial_port  # category  # test_name
         )
 
         if rc.failure_code != FailureCodes.NO_FAILURE:
@@ -213,9 +214,8 @@ if __name__ == "__main__":
     test_document = {
         "_id": "0",  # this can be anything
         "_cell_config_obj": {
-            "serial_port": None,  # Auto-detect FTDI devices
+            "serial_port": "/dev/ttyUSB0",  # Direct port for firmware_a
             "baudrate": 115200,
-            "relay_number": 1,
             "min_firmware_version": "9.5.0",  # Minimum required Tasmota version
             # Oscilloscope configuration
             "oscilloscope_port": 5555,
@@ -225,7 +225,6 @@ if __name__ == "__main__":
             "ac_voltage_range": {"min": 100.0, "max": 130.0},  # 120V ±10%
             "duty_cycle_range": {"min": 45.0, "max": 55.0},  # 50% ±5% for AC sine wave
             "voltage_stability_range": {"min": 0.0, "max": 2.0},  # Max 2% variation
-            "enable_intentional_fail": 0.0,  # Set to 0.025 for 2.5% random failure chance
         },
         "_cell_settings_obj": {
             "oscilloscope_ip": "10.42.0.150",  # Set to your oscilloscope's IP address or None for auto-detection

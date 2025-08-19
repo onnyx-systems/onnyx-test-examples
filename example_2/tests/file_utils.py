@@ -4,26 +4,31 @@ from typing import Any, Dict, List, Optional
 from onnyx.context import gcc
 
 
-def get_output_dir() -> str:
-    """Get output directory - subdirectory in DEV mode, root level in agent mode."""
+def get_filepath(filename: str) -> str:
+    """Get full file path for the given filename.
+    
+    In production mode, files should be created in the working directory
+    so they can be properly uploaded via record_file().
+    In development mode, files are created in test_outputs/ directory.
+    """
     try:
         context = gcc()
-        if context._is_local_mode:  # DEV mode
+        # Check if we're in local mode (development)
+        if hasattr(context, '_is_local_mode') and context._is_local_mode:
+            # Local development mode - use test_outputs directory
             output_dir = "test_outputs"
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
-            return output_dir
-        else:  # Agent mode
-            return "."  # Root level for agent collection
+            return os.path.join(output_dir, filename)
+        else:
+            # Production mode - create files in working directory for upload
+            return filename
     except:
-        # Fallback if no context available
-        return "."
-
-
-def get_filepath(filename: str) -> str:
-    """Get full file path in the appropriate output directory."""
-    output_dir = get_output_dir()
-    return os.path.join(output_dir, filename)
+        # If no context available, assume development mode
+        output_dir = "test_outputs"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        return os.path.join(output_dir, filename)
 
 
 def write_csv(data: List[Dict[str, Any]], filename: str, fieldnames: Optional[List[str]] = None) -> str:
@@ -40,6 +45,12 @@ def write_csv(data: List[Dict[str, Any]], filename: str, fieldnames: Optional[Li
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(data)
+    
+    # Record the file with onnyx agent
+    try:
+        gcc().record_file(filepath)
+    except:
+        pass  # Ignore if gcc() is not available
     
     return filepath
 
@@ -66,6 +77,12 @@ def write_measurements_csv(measurements: Dict[str, Any], filename: str) -> str:
             writer.writeheader()
             writer.writerow(flat_data)
         
+        # Record the file with onnyx agent
+        try:
+            gcc().record_file(filepath)
+        except:
+            pass  # Ignore if gcc() is not available
+        
         return filepath
             
     except Exception as e:
@@ -83,4 +100,11 @@ def save_numpy_array(data, filename: str, delimiter: str = ',', header: str = ''
     
     filepath = get_filepath(filename)
     np.savetxt(filepath, data, delimiter=delimiter, header=header, comments='')
+    
+    # Record the file with onnyx agent
+    try:
+        gcc().record_file(filepath)
+    except:
+        pass  # Ignore if gcc() is not available
+    
     return filepath 

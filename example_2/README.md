@@ -46,9 +46,6 @@ The test can be configured through the `_cell_config_obj` in the test document:
 {
     "serial_port": None,  # Auto-detect FTDI devices or specify (e.g., "COM3" on Windows, "/dev/ttyUSB0" on Linux)
     "baudrate": 115200,   # Serial baudrate
-    "relay_number": 1,    # Relay number to test (1-8)
-    "test_cycles": 3,     # Number of ON/OFF cycles to test
-    "delay_between_cycles": 1.0,  # Delay between cycles in seconds
     "min_firmware_version": "9.5.0",  # Minimum required Tasmota version (optional)
 
     # Oscilloscope configuration (optional)
@@ -71,14 +68,7 @@ When comparing versions, only the numeric parts are considered. For example, "14
 
 ### Relay Configuration
 
-The test is designed to work with Tasmota devices that have one or more relays. For devices with a single relay, the relay is typically referred to as "POWER" in the Tasmota firmware. For devices with multiple relays, they are referred to as "POWER1", "POWER2", etc.
-
-The `relay_number` parameter in the configuration specifies which relay to test:
-
-- For a single-relay device, use `relay_number: 1`
-- For multi-relay devices, use the appropriate relay number (1-8)
-
-If you're testing a single-relay device but experiencing issues, make sure `relay_number` is set to 1, as this is the default for most Tasmota devices.
+The test is designed to work with Tasmota devices that have relays. It always tests relay 1 (the primary relay). For devices with a single relay, the relay is typically referred to as "POWER" in the Tasmota firmware, while multi-relay devices refer to relays as "POWER1", "POWER2", etc.
 
 ## Running the Tests
 
@@ -92,7 +82,7 @@ python example_flow.py
 
 1. **Device Detection**: Detects and connects to the Tasmota device on the specified or auto-detected serial port, prioritizing FTDI USB-to-Serial adapters.
 2. **Firmware Check**: Verifies that the device is running a compatible firmware version (if `min_firmware_version` is specified).
-3. **Relay Control Test**: Tests the relay by performing multiple ON/OFF cycles and verifying the state changes.
+3. **Relay Control Test**: Tests relay 1 by performing ON/OFF cycles and verifying the state changes.
 4. **Relay Response Profile** (if enabled): Measures the relay's response profile using a Rigol oscilloscope, capturing waveforms for both rising and falling edges.
 
 ## Tasmota Driver
@@ -156,24 +146,21 @@ This approach ensures that the test works correctly regardless of the initial st
 - **Failed to get initial state of relay**:
 
   - This can happen if:
-    - The relay number specified doesn't exist on your device
     - The device uses a different naming convention for relays
     - The device is not responding to power state queries
-  - For single-relay devices, make sure `relay_number` is set to 1
   - Check the device's web interface to confirm the relay exists and is operational
   - Try increasing the timeout and retry values in the code
 
 - **Relay control failed**:
 
-  - Ensure the relay number is correct.
-  - Verify the device supports the specified relay.
+  - Verify the device supports relay control.
   - Check if the relay can be controlled manually through the device's web interface.
   - Try increasing the delay between commands.
 
 - **Relay state mismatch**:
 
   - The test expects the relay to change state immediately after sending a command.
-  - If your device has a delay, try increasing the `delay_between_cycles` parameter.
+  - If your device has a delay, try increasing delays in the test code.
   - Some devices may have different response formats; check the logs for details.
 
 - **Firmware version check failed**:

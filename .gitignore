@@ -16,6 +16,7 @@ temp_*
 */dev_mode
 */test_outputs
 */onnyx_test_dir
+onnyx_agent_tmp_working_dir
 
 # go
 *.exe

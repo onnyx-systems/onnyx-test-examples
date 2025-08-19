@@ -1,6 +1,6 @@
 agent_settings:
-  server:
-    url: http://localhost:3001
+  api:
+    server_url: https://app.onnyx.systems
     api_key: fca8d85b-4ae2-4977-bf4d-06bde4dd6c6f
   # The below agent settings specify which station to act as, and which test type to
   # download and run.
