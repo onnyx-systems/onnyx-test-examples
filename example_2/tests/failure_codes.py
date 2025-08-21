@@ -7,7 +7,7 @@ class FailureCodes(FailureCode):
     EXCEPTION = BaseFailureCodes.EXCEPTION
     
     # Test-specific failure codes
-    DEVICE_NOT_FOUND = (-100, "Tasmota device not found")
+    DEVICE_NOT_FOUND = (-100, "Relay module not found")
     CONNECTION_ERROR = (-101, "Failed to connect to device")
     FIRMWARE_ERROR = (-102, "Firmware version check failed")
     RELAY_ERROR = (-103, "Relay operation failed")

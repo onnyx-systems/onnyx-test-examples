@@ -1,6 +1,6 @@
-# Sonoff Test Firmware
+# ESP8266 Relay Test Firmware
 
-Modular test firmware for Sonoff Basic relay with manufacturing test CLI.
+Modular test firmware for ESP8266 relay module with manufacturing test CLI.
 
 ## Project Structure
 

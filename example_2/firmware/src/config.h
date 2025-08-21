@@ -25,7 +25,7 @@
  * 15                 -> GPIO15        -> D8           -> HSPI CS (pulled down)
  * 16                 -> GPIO16        -> D0           -> Deep sleep wakeup
  * 
- * Sonoff Basic Specific Pin Usage
+ * ESP8266 Relay Module Pin Usage
  * ================================
  * GPIO0  (0)  -> Button (inverted, pressed = LOW)
  * GPIO12 (12) -> Relay control (HIGH = ON)
@@ -41,7 +41,7 @@
  * - In Arduino/PlatformIO code, use the Arduino pin number (left column)
  */
 
-// Pin definitions for Sonoff Basic
+// Pin definitions for ESP8266 Relay Module
 #define RELAY_PIN 12    // GPIO12 - Controls the relay
 #define LED_PIN 13      // GPIO13 - Green status LED (inverted logic)
 #define BUTTON_PIN 0    // GPIO0  - User button (inverted logic)
@@ -50,7 +50,7 @@
 #define SERIAL_BAUD 115200
 
 // Test configuration
-#define FIRMWARE_VERSION "14.5.0(tasmota-compat)"
+#define FIRMWARE_VERSION "14.5.0(relay-compat)"
 #define DEFAULT_BURN_INTERVAL 1000
 #define MIN_BURN_INTERVAL 100
 #define BUTTON_DEBOUNCE_MS 50

@@ -1,8 +1,8 @@
 from onnyx.context import test_context
 
-from tests.tasmota_tests import (
+from tests.relay_tests import (
     FailureCodes,
-    detect_tasmota_serial_port,
+    detect_relay_serial_port,
     check_firmware_version,
     test_relay_response,
 )
@@ -32,10 +32,10 @@ def check_required_config_flow(ctx, config, required_keys):
 
 def example_flow(test_document, settings):
     """
-    Main test flow for Tasmota relay testing with oscilloscope measurements.
+    Main test flow for relay module testing with oscilloscope measurements.
     
     This test flow demonstrates:
-    1. Detecting and connecting to a Tasmota device
+    1. Detecting and connecting to a relay module
     2. Checking firmware version
     3. Connecting to an oscilloscope
     4. Measuring relay response characteristics
@@ -45,7 +45,7 @@ def example_flow(test_document, settings):
         test_document: Test document with configuration
         settings: Test settings (e.g., "DEV", "PROD")
     """
-    print("Starting Tasmota relay test flow")
+    print("Starting relay module test flow")
     print("Test document:", test_document)
     print("Settings:", settings)
 
@@ -53,7 +53,7 @@ def example_flow(test_document, settings):
     cellConfig = test_document["_cell_config_obj"]
 
     with test_context(settings, test_document, FailureCodes.get_descriptions()) as ctx:
-        ctx.logger.info("Starting Tasmota relay tests")
+        ctx.logger.info("Starting relay module tests")
 
         failure_code = FailureCodes.NO_FAILURE
 
@@ -89,17 +89,17 @@ def example_flow(test_document, settings):
         oscilloscope_port = cellConfig.get("oscilloscope_port")
         oscilloscope_timebase = cellConfig.get("oscilloscope_timebase")
 
-        # STEP 1: Detect and connect to Tasmota device
-        ctx.logger.info("STEP 1: Detecting and connecting to Tasmota device")
-        rc = detect_tasmota_serial_port(
-            "Tasmota",  # category
+        # STEP 1: Detect and connect to relay module
+        ctx.logger.info("STEP 1: Detecting and connecting to relay module")
+        rc = detect_relay_serial_port(
+            "Relay",  # category
             "Detect and connect to device",  # test_name
             serial_port,  # port
             baudrate,  # baudrate
         )
 
         if rc.failure_code != FailureCodes.NO_FAILURE:
-            ctx.logger.error(f"Failed to detect Tasmota device: {rc.message}")
+            ctx.logger.error(f"Failed to detect relay module: {rc.message}")
             failure_code = rc.failure_code
             ctx.wrap_up(failure_code)
             return
@@ -107,14 +107,14 @@ def example_flow(test_document, settings):
             ctx.record_values(rc.return_value)
             serial_port = rc.return_value["port"]
             ctx.logger.info(
-                f"Successfully connected to Tasmota device on {serial_port}"
+                f"Successfully connected to relay module on {serial_port}"
             )
 
         # STEP 2: Check firmware version if required
         if min_firmware_version:
             ctx.logger.info("STEP 2: Checking firmware version")
             rc = check_firmware_version(
-                "Tasmota",  # category
+                "Relay",  # category
                 "Check firmware version",  # test_name
                 serial_port,
                 min_firmware_version,
@@ -216,7 +216,7 @@ if __name__ == "__main__":
         "_cell_config_obj": {
             "serial_port": "/dev/ttyUSB0",  # Direct port for firmware_a
             "baudrate": 115200,
-            "min_firmware_version": "9.5.0",  # Minimum required Tasmota version
+            "min_firmware_version": "9.5.0",  # Minimum required firmware version
             # Oscilloscope configuration
             "oscilloscope_port": 5555,
             "oscilloscope_timebase": 0.005,  # 5ms/div for 60Hz AC (3 cycles per screen)

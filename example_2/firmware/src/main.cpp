@@ -11,7 +11,7 @@ TestState test_state;
 String command_buffer = "";
 
 void setup() {
-  // Initialize serial like Tasmota does for ESP8266
+  // Initialize serial for ESP8266
   Serial.begin(SERIAL_BAUD);
   Serial.println();  // Important for ESP8266/ESP8285
   Serial.flush();    // Ensure buffer is clear
@@ -22,13 +22,13 @@ void setup() {
   
   test_state.test_start_time = millis();
   
-  // Print startup message (Tasmota-style)
+  // Print startup message
   Serial.println();
-  Serial.println("00:00:00.001 Project tasmota - Tasmota Version " FIRMWARE_VERSION);
-  Serial.println("00:00:00.002 (Emulated for Testing)");
+  Serial.println("00:00:00.001 Project relay-controller - Version " FIRMWARE_VERSION);
+  Serial.println("00:00:00.002 (ESP8266 Relay Module)");
   Serial.println();
   
-  // Send initial status to mimic Tasmota behavior
+  // Send initial status
   Serial.println("{\"StatusSTS\":{\"POWER\":\"OFF\",\"POWER1\":\"OFF\"}}");
   Serial.println();
   Serial.print("> ");

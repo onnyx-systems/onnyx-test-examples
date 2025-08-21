@@ -9,40 +9,40 @@ void processCommand(String cmd) {
   String cmdUpper = cmd;
   cmdUpper.toUpperCase();
   
-  // Support both Tasmota and original commands
+  // Support both compatible and original commands
   if (cmdUpper == "HELP") {
     printHelp();
   }
   else if (cmdUpper == "STATUS" || cmdUpper == "STATUS 0") {
-    // Tasmota-style Status 0 response
-    printTasmotaStatus();
+    // Compatible Status 0 response
+    printDeviceStatus();
   }
   else if (cmdUpper == "STATUS 1") {
-    // Tasmota Status 1 - Device parameters
-    printTasmotaStatus1();
+    // Status 1 - Device parameters
+    printDeviceStatus1();
   }
   else if (cmdUpper == "STATUS 2") {
-    // Tasmota Status 2 - Firmware info
-    printTasmotaStatus2();
+    // Status 2 - Firmware info
+    printDeviceStatus2();
   }
   else if (cmdUpper == "STATUS 3") {
-    // Tasmota Status 3 - Logging (stub)
+    // Status 3 - Logging (stub)
     Serial.println("{\"StatusLOG\":{\"SerialLog\":2,\"WebLog\":2,\"MqttLog\":0,\"SysLog\":0,\"LogHost\":\"\",\"LogPort\":514,\"SSId\":[\"TestAP\"],\"TelePeriod\":300,\"Resolution\":\"558180C0\",\"SetOption\":[\"00008009\",\"2805C80001000600003C5A0A192800000000\",\"00000080\",\"00006000\",\"00000000\"]}}");
   }
   else if (cmdUpper == "STATUS 4") {
-    // Tasmota Status 4 - Memory info
+    // Status 4 - Memory info
     Serial.println("{\"StatusMEM\":{\"ProgramSize\":586,\"Free\":416,\"Heap\":25,\"ProgramFlashSize\":1024,\"FlashSize\":1024,\"FlashChipId\":\"1640C8\",\"FlashFrequency\":40,\"FlashMode\":3,\"Features\":[\"00000809\",\"8FDAC787\",\"04368001\",\"000000CF\",\"010013C0\",\"C000F981\",\"00004004\",\"00001000\"],\"Drivers\":\"1,2,3,4,5,6,7,8,9,10,12,16,18,19,20,21,22,24,26,27,29,30,35,37,45\",\"Sensors\":\"1,2,3,4,5,6\"}}");
   }
   else if (cmdUpper == "STATUS 5") {
-    // Tasmota Status 5 - Network info
-    Serial.println("{\"StatusNET\":{\"Hostname\":\"tasmota-test\",\"IPAddress\":\"0.0.0.0\",\"Gateway\":\"0.0.0.0\",\"Subnetmask\":\"0.0.0.0\",\"DNSServer\":\"0.0.0.0\",\"Mac\":\"24:62:AB:4B:6A:6A\",\"Webserver\":2,\"WifiConfig\":4,\"WifiPower\":17.0}}");
+    // Status 5 - Network info
+    Serial.println("{\"StatusNET\":{\"Hostname\":\"relay-module\",\"IPAddress\":\"0.0.0.0\",\"Gateway\":\"0.0.0.0\",\"Subnetmask\":\"0.0.0.0\",\"DNSServer\":\"0.0.0.0\",\"Mac\":\"24:62:AB:4B:6A:6A\",\"Webserver\":2,\"WifiConfig\":4,\"WifiPower\":17.0}}");
   }
   else if (cmdUpper == "STATUS 11") {
-    // Tasmota-style Status 11 (power status)
-    printTasmotaStatusSTS();
+    // Status 11 (power status)
+    printDeviceStatusSTS();
   }
   else if (cmdUpper == "POWER" || cmdUpper == "POWER1") {
-    // Query power state Tasmota-style
+    // Query power state
     Serial.print("POWER1 ");
     Serial.println(test_state.relay_state ? "ON" : "OFF");
   }
@@ -207,7 +207,7 @@ void processCommand(String cmd) {
     Serial.println("TIMING_TEST:END");
   }
   else if (cmdUpper == "VERSION") {
-    // Tasmota-style version response
+    // Version response
     Serial.print("{\"StatusFWR\":{\"Version\":\"");
     Serial.print(FIRMWARE_VERSION);
     Serial.print("\",\"BuildDateTime\":\"");
@@ -281,10 +281,10 @@ void burnInTest(unsigned long cycles, unsigned long interval) {
   Serial.println(interval);
 }
 
-void printTasmotaStatus() {
-  // Tasmota Status 0 format - returns general device status in JSON
+void printDeviceStatus() {
+  // Status 0 format - returns general device status in JSON
   Serial.print("{\"Status\":{");
-  Serial.print("\"Module\":1,");  // Sonoff Basic
+  Serial.print("\"Module\":1,");  // ESP8266 Relay Module
   Serial.print("\"DeviceName\":\"TestDevice\",");
   Serial.print("\"FriendlyName\":[\"TestRelay\"],");
   Serial.print("\"Topic\":\"test\",");
@@ -300,12 +300,12 @@ void printTasmotaStatus() {
   Serial.println("}}");
 }
 
-void printTasmotaStatus1() {
-  // Tasmota Status 1 format - Device parameters
+void printDeviceStatus1() {
+  // Status 1 format - Device parameters
   Serial.print("{\"StatusPRM\":{");
   Serial.print("\"Baudrate\":115200,");
   Serial.print("\"SerialConfig\":\"8N1\",");
-  Serial.print("\"GroupTopic\":\"tasmotas\",");
+  Serial.print("\"GroupTopic\":\"relays\",");
   Serial.print("\"OtaUrl\":\"\",");
   Serial.print("\"RestartReason\":\"Software/System restart\",");
   Serial.print("\"Uptime\":\"");
@@ -315,7 +315,7 @@ void printTasmotaStatus1() {
   Serial.print("\"Sleep\":50,");
   Serial.print("\"CfgHolder\":4617,");
   Serial.print("\"BootCount\":10,");
-  Serial.print("\"Module\":\"Sonoff Basic\",");
+  Serial.print("\"Module\":\"ESP8266 Relay Module\",");
   Serial.print("\"DeviceName\":\"TestDevice\",");
   Serial.print("\"FriendlyName\":[\"TestRelay\"],");
   Serial.print("\"Topic\":\"test\",");
@@ -337,8 +337,8 @@ void printTasmotaStatus1() {
   Serial.println("}}");
 }
 
-void printTasmotaStatus2() {
-  // Tasmota Status 2 format - Firmware version
+void printDeviceStatus2() {
+  // Status 2 format - Firmware version
   Serial.print("{\"StatusFWR\":{");
   Serial.print("\"Version\":\"");
   Serial.print(FIRMWARE_VERSION);
@@ -354,8 +354,8 @@ void printTasmotaStatus2() {
   Serial.println("}}");
 }
 
-void printTasmotaStatusSTS() {
-  // Tasmota Status 11 format - returns power status in JSON
+void printDeviceStatusSTS() {
+  // Status 11 format - returns power status in JSON
   Serial.print("{\"StatusSTS\":{");
   Serial.print("\"Time\":\"2024-01-01T00:00:00\",");
   Serial.print("\"Uptime\":\"");

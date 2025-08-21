@@ -9,7 +9,7 @@ from onnyx.results import TestResult
 from onnyx.failure import BaseFailureCodes, FailureCode
 
 from .rigol_driver import RigolOscilloscopeDriver
-from .tasmota_driver import TasmotaSerialDriver
+from .relay_driver import RelaySerialDriver
 from .failure_codes import FailureCodes
 
 
@@ -256,7 +256,7 @@ def connect_oscilloscope(
 
 def capture_relay_transition(
     oscilloscope: RigolOscilloscopeDriver,
-    tasmota: TasmotaSerialDriver,
+    relay: RelaySerialDriver,
     relay_number: int,
     turn_on: bool,
     logger
@@ -265,7 +265,7 @@ def capture_relay_transition(
     
     Args:
         oscilloscope: Configured oscilloscope instance
-        tasmota: Connected Tasmota device
+        relay: Connected relay module
         relay_number: Relay number to test
         turn_on: True to capture turn-on, False for turn-off
         logger: Logger instance
@@ -288,7 +288,7 @@ def capture_relay_transition(
         action = "on" if turn_on else "off"
         logger.info(f"Turning relay 1 {action}")
         
-        if not tasmota.set_power(turn_on, 1):
+        if not relay.set_power(turn_on, 1):
             return None
         
         # Wait for trigger and capture with polling instead of fixed delay

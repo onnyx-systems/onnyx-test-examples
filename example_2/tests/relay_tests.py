@@ -10,7 +10,7 @@ from onnyx.failure import BaseFailureCodes, FailureCode
 from onnyx.results import TestResult
 from onnyx.utils import range_check_list, range_check
 
-from .tasmota_driver import TasmotaSerialDriver
+from .relay_driver import RelaySerialDriver
 from .file_utils import write_measurements_csv, save_numpy_array
 from .scope import capture_relay_transition
 from .failure_codes import FailureCodes
@@ -20,7 +20,7 @@ def parse_version(version_str: str) -> Tuple[int, ...]:
     
     Extracts numeric version components from strings like:
     - "9.5.0"
-    - "9.5.0(release-tasmota)"
+    - "9.5.0(release-relay)"
     - "v9.5.0"
     
     Args:
@@ -55,13 +55,13 @@ def check_required_config(config: Dict[str, Any], required_keys: List[str]) -> O
     return None
 
 @test()
-def detect_tasmota_serial_port(
+def detect_relay_serial_port(
     category: str,
     test_name: str,
     port: str = None,
     baudrate: int = 115200
 ) -> TestResult:
-    """Detect and connect to Tasmota device.
+    """Detect and connect to relay module.
     
     Args:
         category: Test category for reporting and organization
@@ -90,15 +90,15 @@ def detect_tasmota_serial_port(
             
         # Try each FTDI port
         for test_port in ftdi_ports:
-            driver = TasmotaSerialDriver(test_port, baudrate)
+            driver = RelaySerialDriver(test_port, baudrate)
             if not driver.connect():
                 continue
                 
-            # Get device info to verify it's a Tasmota device
+            # Get device info to verify it's a relay module
             device_info = driver.get_device_info()
             if device_info:
                 return TestResult(
-                    f"Connected to Tasmota device on {test_port}",
+                    f"Connected to relay module on {test_port}",
                     FailureCodes.NO_FAILURE,
                     return_value={
                         "port": test_port,
@@ -108,12 +108,12 @@ def detect_tasmota_serial_port(
             driver.disconnect()
                 
         return TestResult(
-            "No Tasmota devices found on FTDI ports",
+            "No relay modules found on FTDI ports",
             FailureCodes.DEVICE_NOT_FOUND
         )
     
     # Try specified port
-    driver = TasmotaSerialDriver(port, baudrate)
+    driver = RelaySerialDriver(port, baudrate)
     if not driver.connect():
         return TestResult(
             f"Failed to connect to {port}",
@@ -123,7 +123,7 @@ def detect_tasmota_serial_port(
     device_info = driver.get_device_info()
     if device_info:
         return TestResult(
-            f"Connected to Tasmota device on {port}",
+            f"Connected to relay module on {port}",
             FailureCodes.NO_FAILURE,
             return_value={
                 "port": port,
@@ -133,7 +133,7 @@ def detect_tasmota_serial_port(
     
     driver.disconnect()
     return TestResult(
-        f"Device on {port} is not a Tasmota device",
+        f"Device on {port} is not a compatible relay module",
         FailureCodes.DEVICE_NOT_FOUND
     )
 
@@ -144,7 +144,7 @@ def check_firmware_version(
     port: str,
     min_version: str
 ) -> TestResult:
-    """Check Tasmota firmware version.
+    """Check firmware version.
     
     Args:
         category: Test category for reporting and organization
@@ -155,7 +155,7 @@ def check_firmware_version(
     Returns:
         TestResult with firmware version
     """
-    driver = TasmotaSerialDriver(port)
+    driver = RelaySerialDriver(port)
     if not driver.connect():
         return TestResult(
             f"Failed to connect to {port}",
@@ -203,7 +203,7 @@ def test_relay_response(
     Args:
         category: Test category for reporting and organization
         test_name: Name of this specific test instance
-        serial_port: Serial port for Tasmota device
+        serial_port: Serial port for relay module
         
     Returns:
         TestResult: Test result with measurement data
@@ -232,19 +232,19 @@ def test_relay_response(
         if config_check:
             return config_check
         
-        # Connect to Tasmota device first
-        logger.info("Connecting to Tasmota device...")
-        tasmota = TasmotaSerialDriver(serial_port)
-        if not tasmota.connect():
+        # Connect to relay module first
+        logger.info("Connecting to relay module...")
+        relay = RelaySerialDriver(serial_port)
+        if not relay.connect():
             return TestResult(
-                f"Failed to connect to Tasmota device on {serial_port}",
+                f"Failed to connect to relay module on {serial_port}",
                 FailureCodes.CONNECTION_ERROR
             )
             
         try:
             # Turn relay ON to verify AC signal
             logger.info("Turning relay 1 ON to verify AC signal")
-            if not tasmota.set_power(True, 1):
+            if not relay.set_power(True, 1):
                 return TestResult(
                     "Failed to turn on relay 1",
                     FailureCodes.RELAY_ERROR
@@ -472,7 +472,7 @@ def test_relay_response(
                           f"Voltage Variation: {voltage_stability['variation_coefficient']:.2f}%")
                 
                 # Turn relay off to prepare for turn-on capture
-                if not tasmota.set_power(False, 1):
+                if not relay.set_power(False, 1):
                     return TestResult(
                         "Failed to turn off relay 1",
                         FailureCodes.RELAY_ERROR,
@@ -482,7 +482,7 @@ def test_relay_response(
                 
                 # Capture turn-on transition
                 turn_on_waveform = capture_relay_transition(
-                    oscilloscope, tasmota, 1, True, logger
+                    oscilloscope, relay, 1, True, logger
                 )
                 if turn_on_waveform is None:
                     # If we got a timeout waiting for trigger, it's likely a relay actuation failure
@@ -524,7 +524,7 @@ def test_relay_response(
                 )
             
         finally:
-            tasmota.disconnect()
+            relay.disconnect()
         
     except Exception as e:
         logger.error(f"Error testing relay response: {str(e)}")

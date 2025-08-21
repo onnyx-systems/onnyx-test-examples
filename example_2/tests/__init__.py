@@ -1,7 +1,7 @@
 # Export all test functions and FailureCodes for easy importing
 from .failure_codes import FailureCodes
-from .tasmota_tests import (
-    detect_tasmota_serial_port,
+from .relay_tests import (
+    detect_relay_serial_port,
     check_firmware_version,
     test_relay_response,
 )
@@ -12,7 +12,7 @@ from .scope import (
 
 __all__ = [
     "FailureCodes",
-    "detect_tasmota_serial_port",
+    "detect_relay_serial_port",
     "check_firmware_version",
     "test_relay_response",
     "connect_oscilloscope",

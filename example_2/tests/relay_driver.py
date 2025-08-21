@@ -5,15 +5,15 @@ import logging
 from typing import Dict, Any, Optional, Union, List, Tuple
 
 
-class TasmotaSerialDriver:
-    """Driver for communicating with Tasmota firmware on Sonoff relays over serial port.
+class RelaySerialDriver:
+    """Driver for communicating with ESP8266 relay modules over serial port.
 
-    This driver provides methods to control and query Sonoff relays running Tasmota firmware
+    This driver provides methods to control and query ESP8266 relay modules
     through a serial connection.
     """
 
     def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
-        """Initialize the Tasmota serial driver.
+        """Initialize the relay serial driver.
 
         Args:
             port: Serial port name (e.g., 'COM3' on Windows, '/dev/ttyUSB0' on Linux)
@@ -24,10 +24,10 @@ class TasmotaSerialDriver:
         self.baudrate = baudrate
         self.timeout = timeout
         self.serial = None
-        self.logger = logging.getLogger("TasmotaSerialDriver")
+        self.logger = logging.getLogger("RelaySerialDriver")
 
     def connect(self) -> bool:
-        """Connect to the Tasmota device over serial.
+        """Connect to the relay module over serial.
 
         Returns:
             bool: True if connection successful, False otherwise
@@ -63,12 +63,12 @@ class TasmotaSerialDriver:
             response = self.send_command("Status 0", wait_time=1.0)
 
             if response:
-                self.logger.info(f"Connected to Tasmota device on {self.port}")
+                self.logger.info(f"Connected to relay module on {self.port}")
                 self.logger.debug(f"Response: {response}")
                 return True
             else:
                 self.logger.error(
-                    f"Connected to {self.port} but no valid response from Tasmota"
+                    f"Connected to {self.port} but no valid response from relay module"
                 )
                 self.disconnect()
                 return False
@@ -78,7 +78,7 @@ class TasmotaSerialDriver:
             return False
 
     def disconnect(self) -> None:
-        """Disconnect from the Tasmota device."""
+        """Disconnect from the relay module."""
         if self.serial and self.serial.is_open:
             self.logger.info(f"Disconnecting from {self.port}")
             self.serial.close()
@@ -94,7 +94,7 @@ class TasmotaSerialDriver:
         return self.serial is not None and self.serial.is_open
 
     def send_command(self, command: str, wait_time: float = 0.5) -> Dict[str, Any]:
-        """Send a command to the Tasmota device and return the response.
+        """Send a command to the relay module and return the response.
 
         Args:
             command: Command to send
@@ -104,7 +104,7 @@ class TasmotaSerialDriver:
             Dict[str, Any]: Response from the device or empty dict if failed
         """
         if not self.is_connected():
-            self.logger.error("Not connected to Tasmota device")
+            self.logger.error("Not connected to relay module")
             return {}
 
         try:
@@ -146,7 +146,7 @@ class TasmotaSerialDriver:
             return {}
 
     def send_raw_command(self, command: str, wait_time: float = 0.5) -> str:
-        """Send a command to the Tasmota device and return the raw response without JSON parsing.
+        """Send a command to the relay module and return the raw response without JSON parsing.
 
         Args:
             command: Command to send
@@ -156,7 +156,7 @@ class TasmotaSerialDriver:
             str: Raw response from the device or empty string if failed
         """
         if not self.is_connected():
-            self.logger.error("Not connected to Tasmota device")
+            self.logger.error("Not connected to relay module")
             return ""
 
         try:
@@ -182,7 +182,7 @@ class TasmotaSerialDriver:
             return ""
 
     def get_status(self) -> Optional[Dict[str, Any]]:
-        """Get the status of the Tasmota device.
+        """Get the status of the relay module.
 
         Returns:
             Optional[Dict[str, Any]]: Status information or None if failed
@@ -445,7 +445,7 @@ class TasmotaSerialDriver:
         return None
 
     def get_firmware_version(self) -> Optional[str]:
-        """Get the Tasmota firmware version.
+        """Get the firmware version.
 
         Returns:
             Optional[str]: Firmware version or None if failed
@@ -461,7 +461,7 @@ class TasmotaSerialDriver:
         return None
 
     def get_device_info(self) -> Optional[Dict[str, Any]]:
-        """Get the Tasmota device information.
+        """Get the relay module information.
         
         Returns:
             Optional[Dict[str, Any]]: Device information or None if failed
@@ -533,7 +533,7 @@ class TasmotaSerialDriver:
         return None
 
     def restart(self) -> bool:
-        """Restart the Tasmota device.
+        """Restart the relay module.
 
         Returns:
             bool: True if restart command was sent successfully
@@ -548,7 +548,7 @@ class TasmotaSerialDriver:
         return success
 
     def set_option(self, option: int, value: Union[int, bool]) -> bool:
-        """Set a Tasmota option.
+        """Set a module option.
 
         Args:
             option: Option number
@@ -568,10 +568,10 @@ class TasmotaSerialDriver:
         return success
 
     def execute_command(self, command: str) -> Optional[Dict[str, Any]]:
-        """Execute a custom Tasmota command.
+        """Execute a custom command.
 
         Args:
-            command: Custom Tasmota command
+            command: Custom command
 
         Returns:
             Optional[Dict[str, Any]]: Command response or None if failed

@@ -12,7 +12,7 @@ void initializeHardware() {
   
   // Set initial states
   digitalWrite(RELAY_PIN, LOW);
-  digitalWrite(LED_PIN, HIGH);  // LED is active LOW on most Sonoffs
+  digitalWrite(LED_PIN, HIGH);  // LED is active LOW on most ESP8266 modules
   
   // Attach interrupt for button
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
