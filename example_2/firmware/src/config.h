@@ -28,7 +28,7 @@
  * ESP8266 Relay Module Pin Usage
  * ================================
  * GPIO0  (0)  -> Button (inverted, pressed = LOW)
- * GPIO12 (12) -> Relay control (HIGH = ON)
+ * GPIO16 (16) -> Relay control (HIGH = ON)
  * GPIO13 (13) -> Green LED (inverted, LOW = ON)
  * GPIO1  (TX) -> Serial TX for debug output
  * GPIO3  (RX) -> Serial RX for commands
@@ -42,7 +42,7 @@
  */
 
 // Pin definitions for ESP8266 Relay Module
-#define RELAY_PIN 12    // GPIO12 - Controls the relay
+#define RELAY_PIN 16    // GPIO16 - Controls the relay
 #define LED_PIN 13      // GPIO13 - Green status LED (inverted logic)
 #define BUTTON_PIN 0    // GPIO0  - User button (inverted logic)
 
@@ -50,7 +50,7 @@
 #define SERIAL_BAUD 115200
 
 // Test configuration
-#define FIRMWARE_VERSION "14.5.0(relay-compat)"
+#define FIRMWARE_VERSION "14.5.1"
 #define DEFAULT_BURN_INTERVAL 1000
 #define MIN_BURN_INTERVAL 100
 #define BUTTON_DEBOUNCE_MS 50
