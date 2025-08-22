@@ -69,6 +69,15 @@ void loop() {
     }
   }
   
+  // Handle intermittent failure simulation
+  if (test_state.simulate_intermittent) {
+    if (millis() - test_state.last_intermittent_toggle >= test_state.intermittent_interval) {
+      test_state.last_intermittent_toggle = millis();
+      // Toggle relay randomly
+      setRelay(!test_state.relay_state);
+    }
+  }
+  
   // Handle burn-in test
   if (test_state.burn_in_active) {
     static unsigned long last_toggle = 0;

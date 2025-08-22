@@ -21,6 +21,15 @@ void initializeHardware() {
 void setRelay(bool state) {
   unsigned long now = millis();
   
+  // Handle failure simulations
+  if (test_state.simulate_stuck_on) {
+    // Stuck ON - always keep relay on
+    state = true;
+  } else if (test_state.simulate_stuck_off) {
+    // Stuck OFF - always keep relay off
+    state = false;
+  }
+  
   if (state != test_state.relay_state) {
     if (test_state.relay_state) {
       // Relay turning off - record on time

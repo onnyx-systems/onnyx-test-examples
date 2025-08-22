@@ -218,6 +218,64 @@ void processCommand(String cmd) {
     Serial.print("\"CR\":\"404/699\"}}");
     Serial.println();
   }
+  else if (cmdUpper == "FAIL STUCK ON" || cmdUpper == "SIMULATE STUCK ON") {
+    // Simulate relay stuck in ON position
+    test_state.simulate_stuck_on = true;
+    test_state.simulate_stuck_off = false;
+    test_state.simulate_intermittent = false;
+    Serial.println("OK:SIMULATING_STUCK_ON");
+    setRelay(true); // Force relay on
+  }
+  else if (cmdUpper == "FAIL STUCK OFF" || cmdUpper == "SIMULATE STUCK OFF") {
+    // Simulate relay stuck in OFF position
+    test_state.simulate_stuck_off = true;
+    test_state.simulate_stuck_on = false;
+    test_state.simulate_intermittent = false;
+    Serial.println("OK:SIMULATING_STUCK_OFF");
+    setRelay(false); // Force relay off
+  }
+  else if (cmdUpper.startsWith("FAIL INTERMITTENT") || cmdUpper.startsWith("SIMULATE INTERMITTENT")) {
+    // Simulate intermittent relay failure
+    test_state.simulate_intermittent = true;
+    test_state.simulate_stuck_on = false;
+    test_state.simulate_stuck_off = false;
+    
+    // Parse optional interval parameter
+    int space = cmdUpper.lastIndexOf(' ');
+    if (space > 0 && space < cmdUpper.length() - 1) {
+      unsigned long interval = cmdUpper.substring(space + 1).toInt();
+      if (interval > 0) {
+        test_state.intermittent_interval = interval;
+      }
+    }
+    
+    test_state.last_intermittent_toggle = millis();
+    Serial.print("OK:SIMULATING_INTERMITTENT_");
+    Serial.println(test_state.intermittent_interval);
+  }
+  else if (cmdUpper == "FAIL CLEAR" || cmdUpper == "SIMULATE CLEAR" || cmdUpper == "FAIL RESET" || cmdUpper == "NORMAL") {
+    // Clear all failure simulations
+    test_state.simulate_stuck_on = false;
+    test_state.simulate_stuck_off = false;
+    test_state.simulate_intermittent = false;
+    Serial.println("OK:SIMULATIONS_CLEARED");
+  }
+  else if (cmdUpper == "FAIL STATUS" || cmdUpper == "SIMULATE STATUS") {
+    // Show current failure simulation status
+    Serial.println("=== FAILURE SIMULATIONS ===");
+    Serial.print("STUCK_ON: ");
+    Serial.println(test_state.simulate_stuck_on ? "ACTIVE" : "INACTIVE");
+    Serial.print("STUCK_OFF: ");
+    Serial.println(test_state.simulate_stuck_off ? "ACTIVE" : "INACTIVE");
+    Serial.print("INTERMITTENT: ");
+    if (test_state.simulate_intermittent) {
+      Serial.print("ACTIVE (");
+      Serial.print(test_state.intermittent_interval);
+      Serial.println("ms)");
+    } else {
+      Serial.println("INACTIVE");
+    }
+  }
   else if (cmdUpper == "") {
     // Empty command, just show prompt
   }
@@ -266,6 +324,14 @@ void printHelp() {
   Serial.println("RESTART        - Restart ESP device");
   Serial.println("BOOTLOADER     - Enter bootloader mode");
   Serial.println("VERSION        - Show version info");
+  Serial.println();
+  Serial.println("=== FAILURE SIMULATIONS ===");
+  Serial.println("FAIL STUCK ON    - Simulate relay stuck ON");
+  Serial.println("FAIL STUCK OFF   - Simulate relay stuck OFF");
+  Serial.println("FAIL INTERMITTENT [ms] - Simulate intermittent relay");
+  Serial.println("FAIL CLEAR       - Clear all simulations");
+  Serial.println("FAIL STATUS      - Show simulation status");
+  Serial.println();
   Serial.println("HELP           - Show this help");
 }
 

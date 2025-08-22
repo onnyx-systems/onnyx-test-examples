@@ -17,6 +17,13 @@ struct TestState {
   unsigned long burn_in_cycles = 0;
   unsigned long burn_in_target = 0;
   unsigned long burn_in_interval = 1000;
+  
+  // Failure simulation modes
+  bool simulate_stuck_on = false;
+  bool simulate_stuck_off = false;
+  bool simulate_intermittent = false;
+  unsigned long intermittent_interval = 1000;
+  unsigned long last_intermittent_toggle = 0;
 };
 
 extern TestState test_state;

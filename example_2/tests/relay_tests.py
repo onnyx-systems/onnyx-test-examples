@@ -11,7 +11,7 @@ from onnyx.results import TestResult
 from onnyx.utils import range_check_list, range_check
 
 from .relay_driver import RelaySerialDriver
-from .file_utils import write_measurements_csv, save_numpy_array
+from .file_utils import write_measurements_json, save_numpy_array
 from .scope import capture_relay_transition
 from .failure_codes import FailureCodes
 
@@ -316,8 +316,8 @@ def test_relay_response(
             # Check if we got any valid measurements
             if not freq_values or not vrms_values:
                 return TestResult(
-                    "Failed to get valid measurements",
-                    FailureCodes.MEASUREMENT_ERROR
+                    "Relay failed to switch - no AC detected",
+                    FailureCodes.RELAY_ERROR
                 )
             
             # Use range_check_list for frequency and voltage measurements
@@ -330,7 +330,7 @@ def test_relay_response(
                     'vrms_volts': vrms_values
                 }
                 context.record_values(measurements)
-                write_measurements_csv(measurements, "relay_measurements.csv")
+                write_measurements_json(measurements, "relay_measurements.csv")
                 return TestResult(
                     f"AC frequency out of range: {rc.message}",
                     FailureCodes.AC_FREQUENCY_ERROR,
@@ -346,7 +346,7 @@ def test_relay_response(
                     'vrms_volts': vrms_values
                 }
                 context.record_values(measurements)
-                write_measurements_csv(measurements, "relay_measurements.csv")
+                write_measurements_json(measurements, "relay_measurements.csv")
                 return TestResult(
                     f"AC voltage out of range: {rc.message}",
                     FailureCodes.AC_VOLTAGE_ERROR,
@@ -378,7 +378,7 @@ def test_relay_response(
                     'error': 'Failed to get timing measurements'
                 }
                 context.record_values(measurements)
-                write_measurements_csv(measurements, "relay_measurements.csv")
+                write_measurements_json(measurements, "relay_measurements.csv")
                 return TestResult(
                     "Failed to get timing measurements",
                     FailureCodes.TIMING_MEASUREMENT_ERROR,
@@ -402,7 +402,7 @@ def test_relay_response(
                         'error': 'Invalid timing measurements'
                     }
                     context.record_values(measurements)
-                    write_measurements_csv(measurements, "relay_measurements.csv")
+                    write_measurements_json(measurements, "relay_measurements.csv")
                     return TestResult(
                         "Invalid timing measurements received",
                         FailureCodes.INVALID_TIMING_DATA,
@@ -446,7 +446,7 @@ def test_relay_response(
                 # Check duty cycle
                 rc = range_check(duty_cycle, "duty_cycle_range", cellConfig, prefix="power_quality")
                 if rc.failure_code != BaseFailureCodes.NO_FAILURE:
-                    write_measurements_csv(measurements, "relay_measurements.csv")
+                    write_measurements_json(measurements, "relay_measurements.csv")
                     return TestResult(
                         f"Duty cycle out of range: {duty_cycle}%",
                         FailureCodes.DUTY_CYCLE_ERROR,
@@ -459,7 +459,7 @@ def test_relay_response(
                                cellConfig, 
                                prefix="power_quality")
                 if rc.failure_code != BaseFailureCodes.NO_FAILURE:
-                    write_measurements_csv(measurements, "relay_measurements.csv")
+                    write_measurements_json(measurements, "relay_measurements.csv")
                     return TestResult(
                         f"Voltage stability out of range: {voltage_stability['variation_coefficient']}% variation",
                         FailureCodes.VOLTAGE_STABILITY_ERROR,
@@ -471,6 +471,9 @@ def test_relay_response(
                 logger.info(f"Power Quality - Duty Cycle: {duty_cycle:.1f}%, Period: {period:.2e}s, "
                           f"Voltage Variation: {voltage_stability['variation_coefficient']:.2f}%")
                 
+                # Save measurements JSON for successful test
+                write_measurements_json(measurements, "relay_measurements.json")
+                
                 # Turn relay off to prepare for turn-on capture
                 if not relay.set_power(False, 1):
                     return TestResult(
@@ -478,7 +481,23 @@ def test_relay_response(
                         FailureCodes.RELAY_ERROR,
                         return_value=measurements
                     )
-                time.sleep(0.5)  # Reduced: Let relay settle (was 1s)
+                time.sleep(1.0)  # Let relay settle
+                
+                # Check VPP before turn-on to detect stuck ON
+                logger.info("Checking for stuck ON relay before transition...")
+                vpp_before = oscilloscope.query(":MEASure:VPP? CHANnel1")
+                try:
+                    vpp_value = float(vpp_before) if vpp_before and vpp_before.strip() != '9.9E+37' else 0
+                    if vpp_value > 200:  # If VPP > 200V, AC is present (relay stuck ON)
+                        logger.error(f"Relay appears stuck ON - VPP={vpp_value:.1f}V detected when should be OFF")
+                        return TestResult(
+                            "Relay stuck ON - cannot capture OFF to ON transition",
+                            FailureCodes.RELAY_ERROR,
+                            return_value=measurements
+                        )
+                    logger.info(f"VPP before turn-on: {vpp_value:.1f}V - relay is OFF")
+                except (ValueError, TypeError):
+                    logger.info("No significant voltage detected - relay is OFF")
                 
                 # Capture turn-on transition
                 turn_on_waveform = capture_relay_transition(
@@ -515,7 +534,7 @@ def test_relay_response(
                     'error': str(e)
                 }
                 context.record_values(measurements)
-                write_measurements_csv(measurements, "relay_measurements.csv")
+                write_measurements_json(measurements, "relay_measurements.csv")
                 logger.error(f"Error processing measurements: {str(e)}")
                 return TestResult(
                     f"Error processing measurements: {str(e)}",
