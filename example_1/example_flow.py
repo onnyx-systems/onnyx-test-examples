@@ -90,6 +90,8 @@ def example_flow(test_document: dict, settings: str):
             else:
                 ctx.record_values(rc.return_value)
             ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
+            
+            # failure_code = FailureCodes.WRITE_SPEED_BELOW_MIN
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get(
             "enable_camera_test", True

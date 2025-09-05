@@ -34,3 +34,5 @@ bazel-onnyx-test-examples
 
 # onnyx_test_dir
 onnyx_test_dir/
+
+build/

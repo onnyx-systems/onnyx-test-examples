@@ -1,6 +1,8 @@
 server:
-  url: https://app.onnyx.systems
-  api_key: <api_key>
+  # url: https://onnyx-us-west1-staging1.onnyx.systems
+  # api_key: 5e790c5c-cb15-489a-93c1-016df6b4e79e
+  url: https://onnyx-demo-3.onnyx.systems
+  api_key: 478233f3-0e22-4054-b149-de18323613ce
 iot_relay:
   python_version: 3.11.7
   base_path: example_2

@@ -1,8 +1,15 @@
 server:
-  url: https://app.onnyx.systems
-  api_key: <api_key>
+  url: https://onnyx-us-west1-staging1.onnyx.systems
+  api_key: d6f12db2-35dd-4a7d-9320-4d5e57654ba7
+  # url: https://onnyx-demo-3.onnyx.systems
+  # api_key: 88b48c56-254a-48ac-acd3-272fcb402e6b
+  # url: https://app.onnyx.systems
+  # api_key: aef97c55-1760-476c-9c64-2831f81beed4
+  # davidantaki@gmail.com
+  # api_key: 31d35af2-3ef2-41b7-bc32-ff203c554d08
+
 # Name of the test type to deploy.
-widget_ist:
+widget_ist: 
   # (required) The python version to use for the test type.
   python_version: 3.11.7
   # (required) The base path of the test type.
