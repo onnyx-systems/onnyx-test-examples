@@ -9,6 +9,7 @@ from tests.example_tests import (
     cpu_stress_test,
     get_screen_resolution,
     check_battery_status,
+    ci_env_fake_test,
 )
 from onnyx.mqtt import BannerState
 import platform
@@ -26,6 +27,30 @@ def example_flow(test_document: dict, settings: str):
         ctx.logger.info("Starting example tests")
 
         failure_code = FailureCodes.NO_FAILURE
+
+        # If the test is running in a CI environment, run the fake test and skip hardware tests
+        if failure_code == FailureCodes.NO_FAILURE and cellConfig.get("is_ci_environment", False):
+            ctx.logger.info("Starting test: CI environment test")
+            should_fail = cellConfig.get("enable_intentional_fail", False)
+            rc = ci_env_fake_test("CI Test", "CI environment fake test1", should_fail)
+            if rc.failure_code != FailureCodes.NO_FAILURE:
+                failure_code = rc.failure_code
+            else:
+                ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
+
+            # fake test 2
+            ctx.logger.info("Starting test: CI environment test")
+            should_fail = cellConfig.get("enable_intentional_fail", False)
+            rc = ci_env_fake_test("CI Test", "CI environment fake test2", should_fail)
+            if rc.failure_code != FailureCodes.NO_FAILURE:
+                failure_code = rc.failure_code
+            else:
+                ctx.record_values(rc.return_value)
+            ctx.logger.info("Test completed: %s Failure code: %s", rc.return_value, rc.failure_code)
+
+            ctx.wrap_up(failure_code)
+            return
 
         if failure_code == FailureCodes.NO_FAILURE and cellConfig.get("enable_intentional_fail", False):
             ctx.set_banner("Running intentional test fail...", "info", BannerState.SHOWING)
@@ -152,6 +177,7 @@ if __name__ == "__main__":
             "ping_url": "https://www.google.com",
             "write_speed_mbps": {"max": 10000, "min": 50},
             "enable_intentional_fail": False,
+            "is_ci_environment": False,
         },
         "_cell_settings_obj": {
             "not_used_in_this_example": "This is not used in this example",
