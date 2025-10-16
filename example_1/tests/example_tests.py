@@ -947,3 +947,81 @@ def check_system_dependencies(category: str = None, test_name: str = None):
         "All required dependencies are installed",
         return_value={"dependencies": dependencies},
     )
+
+@test()
+def ci_env_fake_test(
+    category: str = None, test_name: str = None, should_fail: bool = False
+):
+    """Perform a fake test for a CI environment.
+
+    This is a simple test that can be used in CI environments where actual hardware
+    tests (camera, battery, etc.) are not available. It simulates a test that
+    either passes or fails based on the should_fail parameter.
+
+    Args:
+        category (str, optional): Test category. Used internally by the test framework.
+        test_name (str, optional): Test name. Used internally by the test framework.
+        should_fail (bool): Whether to fail the test intentionally.
+
+    Returns:
+        TestResult: Test result with possible outcomes:
+            - Success (NO_FAILURE):
+                "CI environment fake test passed"
+                return_value: {
+                    "test_executed": True,
+                    "environment": "CI",
+                    "timestamp": ISO format timestamp
+                }
+
+            - Failure (INTENTIONAL_TEST_FAIL):
+                "CI environment fake test failed intentionally"
+                return_value: {
+                    "test_executed": True,
+                    "environment": "CI",
+                    "timestamp": ISO format timestamp,
+                    "should_fail": True
+                }
+    """
+    try:
+        context = gcc()
+        context.set_banner(
+            "Running CI environment fake test...",
+            "info",
+            BannerState.SHOWING,
+        )
+
+        # Simulate some work
+        time.sleep(0.5)
+
+        timestamp = datetime.now().isoformat()
+
+        return_value = {
+            "test_executed": True,
+            "environment": "CI",
+            "timestamp": timestamp,
+        }
+
+        if should_fail:
+            return_value["should_fail"] = True
+            context.set_banner(
+                "CI test intentionally failed",
+                "error",
+                BannerState.SHOWING,
+            )
+            return TestResult(
+                "CI environment fake test failed intentionally",
+                FailureCodes.INTENTIONAL_TEST_FAIL,
+                return_value=return_value,
+            )
+
+        context.set_banner("", state=BannerState.HIDDEN)
+        return TestResult(
+            "CI environment fake test passed",
+            FailureCodes.NO_FAILURE,
+            return_value=return_value,
+        )
+    except Exception as e:
+        return TestResult(
+            f"Error during CI fake test: {e}",
+            FailureCodes.EXCEPTION,
+        )
